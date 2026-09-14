@@ -4,5 +4,5 @@
     android:accessibilityFeedbackType="feedbackGeneric"
     android:notificationTimeout="100"
     android:canRetrieveWindowContent="true"
-    android:description="AutoPlay phone automation access. Enable this service only when you want AutoPlay to assist with supported phone tasks."
+    android:description="@string/phone_automation_service_description"
     android:settingsActivity="com.gokul.autoplay.TaskActivity" />
