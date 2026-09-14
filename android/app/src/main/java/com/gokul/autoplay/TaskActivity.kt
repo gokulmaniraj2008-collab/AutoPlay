@@ -39,7 +39,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-/** Unified AutoPlay hub for AI phone tasks, voice commands, scheduling and explicit phone access. */
+/** Unified AutoPlay hub for phone tasks, voice commands, scheduling and explicit phone access. */
 class TaskActivity : ComponentActivity() {
     private var command by mutableStateOf("")
     private var status by mutableStateOf("Ready — tell AutoPlay what to do on your phone.")
@@ -160,17 +160,17 @@ class TaskActivity : ComponentActivity() {
     private fun enableAiMode() {
         showAiModeDialog = false
         if (!Settings.canDrawOverlays(this)) {
-            status = "Allow AutoPlay to appear over other apps, then tap AI Mode again."
+            status = "Allow AutoPlay to appear over other apps, then tap Hey Tommy again."
             startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
             return
         }
         startService(Intent(this, AiModeOverlayService::class.java))
-        status = "AI Mode active — the small AutoPlay chatbot is ready over other apps."
+        status = "Hey Tommy active — the small AutoPlay chatbot is ready over other apps."
     }
 
     private fun disableAiMode() {
         stopService(Intent(this, AiModeOverlayService::class.java))
-        status = "AI Mode turned off."
+        status = "Hey Tommy turned off."
     }
 
     @androidx.compose.runtime.Composable
@@ -191,13 +191,13 @@ class TaskActivity : ComponentActivity() {
 
                     Card(Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                            Text("AI Mode", style = MaterialTheme.typography.titleLarge)
+                            Text("Hey Tommy", style = MaterialTheme.typography.titleLarge)
                             Text("Keep a small AutoPlay chatbot bubble visible while you use other apps.")
                             Button(onClick = { showAiModeDialog = true }, modifier = Modifier.fillMaxWidth()) {
-                                Text("Activate AI Mode")
+                                Text("Activate Hey Tommy")
                             }
                             OutlinedButton(onClick = { disableAiMode() }, modifier = Modifier.fillMaxWidth()) {
-                                Text("Turn off AI Mode")
+                                Text("Turn off Hey Tommy")
                             }
                         }
                     }
@@ -258,8 +258,8 @@ class TaskActivity : ComponentActivity() {
             if (showAiModeDialog) {
                 AlertDialog(
                     onDismissRequest = { showAiModeDialog = false },
-                    title = { Text("AI Mode") },
-                    text = { Text("This option will activate AutoPlay AI Mode so a small chatbot bubble stays available while you use other apps. You can turn it off at any time.") },
+                    title = { Text("Hey Tommy") },
+                    text = { Text("This option will activate Hey Tommy so a small AutoPlay chatbot bubble stays available while you use other apps. You can turn it off at any time.") },
                     confirmButton = { TextButton(onClick = { enableAiMode() }) { Text("OK") } },
                     dismissButton = { TextButton(onClick = { showAiModeDialog = false }) { Text("CANCEL") } }
                 )
