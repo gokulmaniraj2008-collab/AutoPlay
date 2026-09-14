@@ -7,7 +7,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 object CloudScheduleSync {
-    private fun connection(path: String, method: String, body: String? = null): HttpURLConnection {
+    private fun connection(path: String, method: String, body: String? = null, returnRepresentation: Boolean = false): HttpURLConnection {
         return (URL(SupabaseConfig.URL + "/rest/v1/" + path).openConnection() as HttpURLConnection).apply {
             requestMethod = method
             connectTimeout = 10_000
@@ -17,8 +17,22 @@ object CloudScheduleSync {
             setRequestProperty("Authorization", "Bearer ${SupabaseConfig.PUBLISHABLE_KEY}")
             setRequestProperty("Content-Type", "application/json")
             setRequestProperty("Accept", "application/json")
-            if (body != null) setRequestProperty("Prefer", "return=minimal")
+            if (body != null) setRequestProperty("Prefer", if (returnRepresentation) "return=representation" else "return=minimal")
         }
+    }
+
+    private fun readError(c: HttpURLConnection): String {
+        return runCatching {
+            (c.errorStream ?: c.inputStream).bufferedReader().use { it.readText() }
+        }.getOrDefault("").ifBlank { "HTTP ${c.responseCode}" }
+    }
+
+    private fun requireUpdatedRow(c: HttpURLConnection, scheduleId: String) {
+        val response = runCatching {
+            c.inputStream.bufferedReader().use { it.readText() }
+        }.getOrDefault("")
+        if (response.isBlank()) throw IllegalStateException("Schedule $scheduleId was not found or could not be updated")
+        if (JSONArray(response).length() == 0) throw IllegalStateException("Schedule $scheduleId was not found or could not be updated")
     }
 
     fun sync(context: Context, callback: (Result<Int>) -> Unit) {
@@ -26,7 +40,7 @@ object CloudScheduleSync {
             try {
                 val c = connection("schedules?select=id,name,scheduled_date,time,playlist_url,enabled,timezone&order=scheduled_date.asc.nullslast,time.asc", "GET")
                 val code = c.responseCode
-                if (code !in 200..299) throw IllegalStateException("Supabase returned HTTP $code")
+                if (code !in 200..299) throw IllegalStateException(readError(c))
                 val array = JSONArray(c.inputStream.bufferedReader().use { it.readText() })
                 val schedules = buildList {
                     for (i in 0 until array.length()) {
@@ -61,9 +75,11 @@ object CloudScheduleSync {
                     put("enabled", enabled)
                     put("timezone", timezone)
                 }.toString()
-                val c = connection("schedules", "POST", body)
+                val c = connection("schedules", "POST", body, returnRepresentation = true)
                 val code = c.responseCode
-                if (code !in 200..299) throw IllegalStateException("Supabase returned HTTP $code")
+                if (code !in 200..299) throw IllegalStateException(readError(c))
+                val response = c.inputStream.bufferedReader().use { it.readText() }
+                if (response.isBlank() || JSONArray(response).length() == 0) throw IllegalStateException("Schedule was not created")
                 callback(Result.success(id))
             } catch (error: Throwable) { callback(Result.failure(error)) }
         }.start()
@@ -73,16 +89,17 @@ object CloudScheduleSync {
         Thread {
             try {
                 val body = JSONObject().apply {
-                    put("name", name)
+                    put("name", name.trim())
                     put("scheduled_date", scheduledDate ?: JSONObject.NULL)
-                    put("time", time)
+                    put("time", time.take(5))
                     put("enabled", enabled)
                     put("timezone", timezone)
                     put("updated_at", java.time.Instant.now().toString())
                 }.toString()
-                val c = connection("schedules?id=eq.$scheduleId", "PATCH", body)
+                val c = connection("schedules?id=eq.$scheduleId", "PATCH", body, returnRepresentation = true)
                 val code = c.responseCode
-                if (code !in 200..299) throw IllegalStateException("Supabase returned HTTP $code")
+                if (code !in 200..299) throw IllegalStateException(readError(c))
+                requireUpdatedRow(c, scheduleId)
                 callback(Result.success(Unit))
             } catch (error: Throwable) { callback(Result.failure(error)) }
         }.start()
@@ -91,9 +108,11 @@ object CloudScheduleSync {
     fun setEnabled(context: Context, scheduleId: String, enabled: Boolean, callback: (Result<Unit>) -> Unit) {
         Thread {
             try {
-                val c = connection("schedules?id=eq.$scheduleId", "PATCH", JSONObject().put("enabled", enabled).put("updated_at", java.time.Instant.now().toString()).toString())
+                val body = JSONObject().put("enabled", enabled).put("updated_at", java.time.Instant.now().toString()).toString()
+                val c = connection("schedules?id=eq.$scheduleId", "PATCH", body, returnRepresentation = true)
                 val code = c.responseCode
-                if (code !in 200..299) throw IllegalStateException("Supabase returned HTTP $code")
+                if (code !in 200..299) throw IllegalStateException(readError(c))
+                requireUpdatedRow(c, scheduleId)
                 val updated = CloudScheduleStore.loadAll(context).map { s -> if (s.id == scheduleId) s.copy(enabled = enabled) else s }
                 CloudScheduleStore.saveAll(context, updated)
                 callback(Result.success(Unit))
@@ -106,7 +125,7 @@ object CloudScheduleSync {
             try {
                 val c = connection("schedules?id=eq.$scheduleId", "DELETE")
                 val code = c.responseCode
-                if (code !in 200..299) throw IllegalStateException("Supabase returned HTTP $code")
+                if (code !in 200..299) throw IllegalStateException(readError(c))
                 ExactCloudAlarmScheduler.cancel(context, scheduleId)
                 LocalTrackStore.remove(context, scheduleId)
                 CloudScheduleStore.saveAll(context, CloudScheduleStore.loadAll(context).filterNot { it.id == scheduleId })
