@@ -1,3 +1,5 @@
+import "./globals.css";
+
 export const metadata = {
   title: "AutoPlay",
   description: "Music automation dashboard"
