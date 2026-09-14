@@ -1,116 +1,70 @@
 package com.gokul.autoplay
 
 import android.accessibilityservice.AccessibilityService
+import android.content.Intent
 import android.graphics.Color
-import android.graphics.drawable.GradientDrawable
+import android.graphics.PixelFormat
+import android.os.Build
 import android.view.Gravity
+import android.view.MotionEvent
+import android.view.View
 import android.view.WindowManager
-import android.view.accessibility.AccessibilityEvent
-import android.view.inputmethod.InputMethodManager
-import android.content.Context
 import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
-import androidx.core.view.setPadding
 
-/**
- * User-enabled accessibility bridge for AutoPlay phone workflows.
- * It also provides a small chatbot-style command bubble while another app is in the foreground.
- */
+/** Accessibility-backed phone automation UI and command bubble. */
 class PhoneAutomationService : AccessibilityService() {
-    companion object {
-        @Volatile private var instance: PhoneAutomationService? = null
-        @Volatile private var pendingTask: String? = null
-
-        fun beginWhatsAppMessage(person: String, message: String) {
-            pendingTask = "WHATSAPP|$person|$message"
-        }
-
-        fun beginInstagramBio(bio: String) {
-            pendingTask = "INSTAGRAM_BIO|$bio"
-        }
-
-        fun clearPendingTask() {
-            pendingTask = null
-        }
-
-        fun showCommandBubble() {
-            instance?.showBubble()
-        }
-
-        fun hideCommandBubble() {
-            instance?.hideBubble()
-        }
-    }
-
     private var windowManager: WindowManager? = null
-    private var bubble: TextView? = null
-    private var panel: LinearLayout? = null
+    private var bubble: View? = null
+    private var panel: View? = null
 
     override fun onServiceConnected() {
         super.onServiceConnected()
-        instance = this
-    }
-
-    override fun onAccessibilityEvent(event: AccessibilityEvent?) = Unit
-
-    override fun onInterrupt() {
-        clearPendingTask()
-    }
-
-    override fun onDestroy() {
-        hideBubble()
-        if (instance === this) instance = null
-        super.onDestroy()
-    }
-
-    private fun overlayParams(width: Int, height: Int, focusable: Boolean = false): WindowManager.LayoutParams = WindowManager.LayoutParams(
-        width,
-        height,
-        WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
-        if (focusable) WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN else WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
-        android.graphics.PixelFormat.TRANSLUCENT
-    ).apply {
-        gravity = Gravity.BOTTOM or Gravity.END
-        x = 18
-        y = 110
-        if (focusable) softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE or WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE
-    }
-
-    private fun showBubble() {
-        if (bubble != null || panel != null) return
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
-        bubble = TextView(this).apply {
+    }
+
+    override fun onAccessibilityEvent(event: android.view.accessibility.AccessibilityEvent?) = Unit
+    override fun onInterrupt() = Unit
+
+    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
+
+    fun showCommandBubble() {
+        if (bubble != null) return
+        val wm = windowManager ?: return
+        val view = TextView(this).apply {
             text = "✦"
             textSize = 24f
             gravity = Gravity.CENTER
             setTextColor(Color.WHITE)
-            background = GradientDrawable().apply {
-                shape = GradientDrawable.OVAL
-                setColor(Color.rgb(25, 99, 220))
-            }
+            setBackgroundColor(Color.rgb(40, 120, 255))
+            contentDescription = "AutoPlay chatbot. Tap to enter a command."
             setOnClickListener { expandBubble() }
         }
-        runCatching { windowManager?.addView(bubble, overlayParams(dp(58), dp(58))) }
-            .onFailure { bubble = null }
+        val params = WindowManager.LayoutParams(
+            dp(58), dp(58),
+            if (Build.VERSION.SDK_INT >= 26) WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY else WindowManager.LayoutParams.TYPE_PHONE,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+            PixelFormat.TRANSLUCENT
+        ).apply {
+            gravity = Gravity.TOP or Gravity.END
+            x = dp(16)
+            y = dp(180)
+        }
+        wm.addView(view, params)
+        bubble = view
     }
 
     private fun expandBubble() {
-        bubble?.let { runCatching { windowManager?.removeView(it) } }
-        bubble = null
-
+        if (panel != null) return
+        val wm = windowManager ?: return
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(14))
-            background = GradientDrawable().apply {
-                cornerRadius = dp(22).toFloat()
-                setColor(Color.WHITE)
-                setStroke(dp(1), Color.rgb(225, 229, 236))
-            }
+            setPadding(dp(16), dp(12), dp(16), dp(12))
+            setBackgroundColor(Color.WHITE)
         }
-
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -129,13 +83,16 @@ class PhoneAutomationService : AccessibilityService() {
         }
         header.addView(title, LinearLayout.LayoutParams(0, dp(42), 1f))
         header.addView(close, LinearLayout.LayoutParams(dp(42), dp(42)))
+        root.addView(header)
 
         val input = EditText(this).apply {
             hint = "Try: search Tamil songs"
-            singleLine = true
+            maxLines = 1
             setTextColor(Color.BLACK)
             setHintTextColor(Color.GRAY)
         }
+        root.addView(input, LinearLayout.LayoutParams(-1, dp(52)))
+
         val run = Button(this).apply {
             text = "Run command"
             setOnClickListener {
@@ -148,37 +105,42 @@ class PhoneAutomationService : AccessibilityService() {
                     return@setOnClickListener
                 }
                 if (task.scheduledAtMillis != null) {
-                    Toast.makeText(this@PhoneAutomationService, "Scheduled commands are available from the main app.", Toast.LENGTH_SHORT).show()
-                    return@setOnClickListener
+                    TaskStore.upsert(this@PhoneAutomationService, task)
+                    TaskScheduler.schedule(this@PhoneAutomationService, task)
+                    Toast.makeText(this@PhoneAutomationService, parsed.message, Toast.LENGTH_SHORT).show()
+                } else {
+                    val result = TaskExecutor.execute(this@PhoneAutomationService, task)
+                    TaskHistoryStore.record(this@PhoneAutomationService, task, result)
+                    Toast.makeText(this@PhoneAutomationService, result.message, Toast.LENGTH_SHORT).show()
+                    if (result.success) collapseBubble()
                 }
-                val result = TaskExecutor.execute(this@PhoneAutomationService, task)
-                Toast.makeText(this@PhoneAutomationService, result.message, Toast.LENGTH_SHORT).show()
-                if (result.success && task.action == PhoneTask.Action.YOUTUBE_SEARCH) collapseBubble()
             }
         }
+        root.addView(run, LinearLayout.LayoutParams(-1, dp(52)))
 
-        root.addView(header)
-        root.addView(input, LinearLayout.LayoutParams(-1, dp(52)))
-        root.addView(run, LinearLayout.LayoutParams(-1, dp(50)))
+        val params = WindowManager.LayoutParams(
+            dp(320), WindowManager.LayoutParams.WRAP_CONTENT,
+            if (Build.VERSION.SDK_INT >= 26) WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY else WindowManager.LayoutParams.TYPE_PHONE,
+            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+            PixelFormat.TRANSLUCENT
+        ).apply {
+            gravity = Gravity.TOP or Gravity.END
+            x = dp(12)
+            y = dp(140)
+        }
+        wm.addView(root, params)
         panel = root
-        runCatching { windowManager?.addView(panel, overlayParams(dp(300), dp(160), focusable = true)) }
-            .onFailure { panel = null; showBubble() }
-        input.requestFocus()
-        (getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager).showSoftInput(input, InputMethodManager.SHOW_IMPLICIT)
     }
 
     private fun collapseBubble() {
         panel?.let { runCatching { windowManager?.removeView(it) } }
         panel = null
-        showBubble()
     }
 
-    private fun hideBubble() {
+    override fun onDestroy() {
+        collapseBubble()
         bubble?.let { runCatching { windowManager?.removeView(it) } }
-        panel?.let { runCatching { windowManager?.removeView(it) } }
         bubble = null
-        panel = null
+        super.onDestroy()
     }
-
-    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 }
