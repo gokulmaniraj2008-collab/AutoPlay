@@ -1,10 +1,13 @@
 package com.gokul.autoplay
 
 import android.Manifest
+import android.accessibilityservice.AccessibilityServiceInfo
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.provider.Settings
+import android.text.TextUtils
 import androidx.core.content.ContextCompat
 
 object TaskExecutor {
@@ -16,6 +19,8 @@ object TaskExecutor {
             PhoneTask.Action.CALL -> call(context, task.target)
             PhoneTask.Action.OPEN_APP -> openApp(context, task.target)
             PhoneTask.Action.OPEN_URL -> openUrl(context, task.target)
+            PhoneTask.Action.SEND_WHATSAPP -> runWhatsAppMessage(context, task.target)
+            PhoneTask.Action.EDIT_INSTAGRAM_BIO -> runInstagramBio(context, task.target)
             PhoneTask.Action.UNKNOWN -> Result(false, "Unsupported task")
         }
     }
@@ -46,6 +51,8 @@ object TaskExecutor {
         val packageName = when {
             "spotify" in query -> "com.spotify.music"
             "youtube" in query -> "com.google.android.youtube"
+            "instagram" in query -> "com.instagram.android"
+            "whatsapp" in query -> "com.whatsapp"
             "maps" in query || "google map" in query -> "com.google.android.apps.maps"
             "chrome" in query -> "com.android.chrome"
             else -> return Result(false, "I don't have a package mapping for '$name' yet.")
@@ -55,6 +62,45 @@ object TaskExecutor {
         launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         context.startActivity(launch)
         return Result(true, "Opened $name")
+    }
+
+    private fun runWhatsAppMessage(context: Context, target: String): Result {
+        val parts = target.split("|||", limit = 2)
+        if (parts.size != 2 || parts[0].isBlank() || parts[1].isBlank()) {
+            return Result(false, "Use: Open WhatsApp and send Praneesh Hi")
+        }
+        if (!isAccessibilityEnabled(context)) return accessibilityRequired(context)
+        val launch = context.packageManager.getLaunchIntentForPackage("com.whatsapp")
+            ?: return Result(false, "WhatsApp is not installed")
+        PhoneAutomationService.beginWhatsAppMessage(parts[0].trim(), parts[1].trim())
+        launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        context.startActivity(launch)
+        return Result(true, "WhatsApp automation started for ${parts[0].trim()}. AutoPlay will send the requested message if the WhatsApp UI matches the supported flow.")
+    }
+
+    private fun runInstagramBio(context: Context, bio: String): Result {
+        if (bio.isBlank()) return Result(false, "Use: Change my Instagram bio to <your bio>")
+        if (!isAccessibilityEnabled(context)) return accessibilityRequired(context)
+        val launch = context.packageManager.getLaunchIntentForPackage("com.instagram.android")
+            ?: return Result(false, "Instagram is not installed")
+        PhoneAutomationService.beginInstagramBio(bio)
+        launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        context.startActivity(launch)
+        return Result(true, "Instagram bio automation started. AutoPlay will edit and save the bio if the Instagram UI matches the supported flow.")
+    }
+
+    private fun accessibilityRequired(context: Context): Result {
+        return Result(false, "Phone Automation access is required. Open AutoPlay → Enable Phone Automation in Android Settings, then run the task again.")
+    }
+
+    private fun isAccessibilityEnabled(context: Context): Boolean {
+        val manager = context.getSystemService(Context.ACCESSIBILITY_SERVICE) as android.view.accessibility.AccessibilityManager
+        val services = manager.getEnabledAccessibilityServiceList(AccessibilityServiceInfo.FEEDBACK_ALL_MASK)
+        val expected = "${context.packageName}/${PhoneAutomationService::class.java.name}"
+        return services.any { service ->
+            val component = service.resolveInfo.serviceInfo.let { "${it.packageName}/${it.name}" }
+            TextUtils.equals(component, expected)
+        }
     }
 
     private fun openUrl(context: Context, value: String): Result {
