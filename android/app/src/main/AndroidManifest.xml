@@ -11,6 +11,8 @@
     <application
         android:theme="@android:style/Theme.Material.Light.NoActionBar"
         android:label="AutoPlay"
+        android:icon="@drawable/ic_autoplay_logo"
+        android:roundIcon="@drawable/ic_autoplay_logo"
         android:allowBackup="true">
         <activity
             android:name=".MainActivity"
