@@ -8,6 +8,12 @@
 
 Use the web dashboard to manage AutoPlay schedules and Spotify playlist links.
 
+## 📱 Android App
+
+**Download the AutoPlay Android app:** [Download APK](https://github.com/gokulmaniraj2008-collab/AutoPlay/releases/latest)
+
+> The APK download will become active after the Android APK is published in a GitHub Release.
+
 ## 📱 Project
 
 AutoPlay is a web + Android automation project designed to let users create recurring music schedules, save them locally on Android, and launch Spotify playlist links at the scheduled time.
