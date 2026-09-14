@@ -49,7 +49,7 @@ private data class TommyMessage(val fromTommy: Boolean, val text: String)
 @Composable
 fun TommyChatPage() {
     val context = LocalContext.current
-    val messages = remember { mutableStateListOf(TommyMessage(true, "Hi! I'm Tommy. Try: Open Instagram, go to Reels, or scroll the reel.")) }
+    val messages = remember { mutableStateListOf(TommyMessage(true, "Hi! I'm Tommy. Try: Open Instagram, go to Reels, scroll, like, follow, or open comments.")) }
     var input by remember { mutableStateOf("") }
     var isListening by remember { mutableStateOf(false) }
     var voiceStatus by remember { mutableStateOf("Tap 🎤 and speak") }
@@ -74,7 +74,7 @@ fun TommyChatPage() {
             override fun onResults(results: android.os.Bundle?) {
                 isListening = false
                 val spoken = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()?.trim().orEmpty()
-                if (spoken.isNotEmpty()) { input = spoken; voiceStatus = "Command ready"; sendCommand(context, messages, spoken).also { input = ""; voiceStatus = "Command executed" } }
+                if (spoken.isNotEmpty()) { input = spoken; voiceStatus = "Command ready"; sendCommand(context, messages, spoken); input = ""; voiceStatus = "Command executed" }
                 else voiceStatus = "No speech detected"
             }
             override fun onPartialResults(partialResults: android.os.Bundle?) {
@@ -146,28 +146,33 @@ private fun executeTommyChatCommand(context: Context, rawCommand: String): Strin
             launchApp(context, "com.instagram.android", "https://www.instagram.com")
             "OK, opening Instagram full screen. Say 'go reels page' next."
         }
-        command.contains("instagram") -> {
-            launchApp(context, "com.instagram.android", "https://www.instagram.com")
-            "OK, Instagram opened."
-        }
+        command.contains("instagram") -> { launchApp(context, "com.instagram.android", "https://www.instagram.com"); "OK, Instagram opened." }
         (command.contains("reel") || command.contains("reels")) && (command.contains("go") || command.contains("open") || command.contains("show") || command.contains("page")) -> {
-            if (tapAccessibilityCommand(context, "OPEN_INSTAGRAM_REELS")) "OK, opening Instagram Reels." else "Instagram Reels command received. Enable Tommy Accessibility so I can control the Instagram screen."
+            if (tapAccessibilityCommand("OPEN_INSTAGRAM_REELS")) "OK, opening Instagram Reels." else accessibilityRequired()
         }
         (command.contains("scroll") || command.contains("swipe") || command.contains("next")) && (command.contains("reel") || command.contains("instagram") || command.contains("down")) -> {
-            if (tapAccessibilityCommand(context, "SCROLL_REEL")) "OK, scrolling to the next reel." else "Scroll command received. Enable Tommy Accessibility so I can swipe the Instagram screen."
+            if (tapAccessibilityCommand("SCROLL_REEL")) "OK, scrolling to the next reel." else accessibilityRequired()
+        }
+        command.contains("like") && (command.contains("reel") || command.contains("instagram") || command.contains("this")) -> {
+            if (tapAccessibilityCommand("LIKE_REEL")) "OK, liked this Reel." else accessibilityRequired()
+        }
+        command.contains("follow") && (command.contains("account") || command.contains("user") || command.contains("this") || command.contains("instagram")) -> {
+            if (tapAccessibilityCommand("FOLLOW_ACCOUNT")) "OK, following this account." else accessibilityRequired()
+        }
+        (command.contains("comment") || command.contains("comments")) && (command.contains("open") || command.contains("show") || command.contains("view") || command.contains("go") || command.contains("this")) -> {
+            if (tapAccessibilityCommand("OPEN_COMMENTS")) "OK, opening comments." else accessibilityRequired()
         }
         command.contains("youtube") -> { launchApp(context, "com.google.android.youtube", "https://www.youtube.com"); "OK, opening YouTube." }
         command.contains("google") -> { launchApp(context, "com.google.android.googlequicksearchbox", "https://www.google.com"); "OK, opening Google." }
         command.contains("whatsapp") -> { launchApp(context, "com.whatsapp", "https://www.whatsapp.com"); "OK, opening WhatsApp." }
         command == "hi" || command == "hello" || command.contains("hello tommy") -> "OK, I'm here."
-        command.contains("help") -> "Try: Open Instagram, go to Reels, or scroll the reel."
+        command.contains("help") -> "Try: Open Instagram, go to Reels, scroll, like, follow, or open comments."
         else -> "I received: \"$rawCommand\". I don't have an action for that yet."
     }
 }
 
-private fun tapAccessibilityCommand(context: Context, action: String): Boolean {
-    return TommyAccessibilityService.performTommyAction(action)
-}
+private fun accessibilityRequired(): String = "Command received. Enable Tommy Accessibility so I can control the Instagram screen."
+private fun tapAccessibilityCommand(action: String): Boolean = TommyAccessibilityService.performTommyAction(action)
 
 private fun launchApp(context: Context, packageName: String, fallbackUrl: String) {
     val launchIntent = context.packageManager.getLaunchIntentForPackage(packageName)
