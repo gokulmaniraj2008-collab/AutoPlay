@@ -40,6 +40,7 @@ class FloatingTommyService : Service() {
     private val mainHandler = Handler(Looper.getMainLooper())
     private var listening = false
     private var stopping = false
+    private var commandMode = false
     private var flashlightOn = false
 
     override fun onCreate() {
@@ -54,11 +55,13 @@ class FloatingTommyService : Service() {
         }
 
         if (!Settings.canDrawOverlays(this) || !hasMicrophonePermission()) {
+            sendStatus(TommyStatusEvents.OFF, "Tommy is OFF")
             stopSelf()
             return
         }
 
         showBubble()
+        sendStatus(TommyStatusEvents.ON, "Tommy is ON")
         startHeyTommyListening()
     }
 
@@ -124,11 +127,7 @@ class FloatingTommyService : Service() {
                 }
                 MotionEvent.ACTION_UP -> {
                     if (!moved) {
-                        startActivity(
-                            Intent(this@FloatingTommyService, MainActivity::class.java).apply {
-                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                            }
-                        )
+                        enterDirectCommandMode()
                     }
                     true
                 }
@@ -140,6 +139,16 @@ class FloatingTommyService : Service() {
         windowManager?.addView(view, params)
     }
 
+    private fun enterDirectCommandMode() {
+        commandMode = true
+        bubble?.text = "…"
+        sendStatus(TommyStatusEvents.LISTENING, "Tommy is listening…")
+        textToSpeech?.speak("I'm listening", TextToSpeech.QUEUE_FLUSH, null, "tommy-listening")
+        speechRecognizer?.cancel()
+        listening = false
+        mainHandler.postDelayed({ listenNow() }, 120L)
+    }
+
     private fun startHeyTommyListening() {
         if (listening || !SpeechRecognizer.isRecognitionAvailable(this)) return
 
@@ -147,11 +156,17 @@ class FloatingTommyService : Service() {
             setRecognitionListener(object : RecognitionListener {
                 override fun onReadyForSpeech(params: android.os.Bundle?) {
                     listening = true
-                    bubble?.text = "T"
+                    if (commandMode) {
+                        bubble?.text = "…"
+                        sendStatus(TommyStatusEvents.LISTENING, "Tommy is listening…")
+                    } else {
+                        bubble?.text = "T"
+                    }
                 }
 
                 override fun onBeginningOfSpeech() {
                     bubble?.text = "…"
+                    sendStatus(TommyStatusEvents.LISTENING, "Tommy is listening…")
                 }
 
                 override fun onRmsChanged(rmsdB: Float) = Unit
@@ -160,25 +175,45 @@ class FloatingTommyService : Service() {
 
                 override fun onError(error: Int) {
                     listening = false
+                    if (commandMode) {
+                        commandMode = false
+                        bubble?.text = "T"
+                        sendStatus(TommyStatusEvents.ON, "Tommy is ON")
+                    }
                     scheduleListeningRestart()
                 }
 
                 override fun onResults(results: android.os.Bundle?) {
                     listening = false
-                    val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                        .orEmpty()
+                    val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION).orEmpty()
                     val heardText = matches.firstOrNull()?.normalizeVoiceText().orEmpty()
                     val heardHeyTommy = matches.any { it.normalizeVoiceText().contains("hey tommy") }
+
+                    if (commandMode) {
+                        commandMode = false
+                        bubble?.text = "✓"
+                        if (heardText.isNotBlank()) {
+                            sendStatus(TommyStatusEvents.HEARD, "Tommy heard: $heardText")
+                            executeVoiceCommand(heardText)
+                        } else {
+                            sendStatus(TommyStatusEvents.ON, "Tommy is ON")
+                        }
+                        mainHandler.postDelayed({ bubble?.text = "T" }, 1200L)
+                        scheduleListeningRestart()
+                        return
+                    }
 
                     if (heardHeyTommy) {
                         bubble?.text = "✓"
                         val command = heardText.substringAfter("hey tommy", "").trim()
                         if (command.isNotBlank()) {
+                            sendStatus(TommyStatusEvents.HEARD, "Tommy heard: $command")
                             executeVoiceCommand(command)
                         } else {
+                            sendStatus(TommyStatusEvents.ON, "Tommy is ON")
                             toast("Tommy is ready")
                         }
-                        mainHandler.postDelayed({ bubble?.text = "T" }, 1200)
+                        mainHandler.postDelayed({ bubble?.text = "T" }, 1200L)
                     }
 
                     scheduleListeningRestart()
@@ -188,7 +223,10 @@ class FloatingTommyService : Service() {
                     val matches = partialResults
                         ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                         .orEmpty()
-                    if (matches.any { it.normalizeVoiceText().contains("hey tommy") }) {
+                    val partialText = matches.firstOrNull()?.normalizeVoiceText().orEmpty()
+                    if (commandMode && partialText.isNotBlank()) {
+                        sendStatus(TommyStatusEvents.LISTENING, "Tommy heard: $partialText")
+                    } else if (matches.any { it.normalizeVoiceText().contains("hey tommy") }) {
                         bubble?.text = "✓"
                     }
                 }
@@ -201,6 +239,7 @@ class FloatingTommyService : Service() {
     }
 
     private fun executeVoiceCommand(command: String) {
+        sendStatus(TommyStatusEvents.WORKING, "Tommy is working…")
         when {
             command.contains("light") && (command.contains("on") || command.contains("turn")) -> {
                 setFlashlight(true)
@@ -250,6 +289,7 @@ class FloatingTommyService : Service() {
     private fun setFlashlight(enabled: Boolean) {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
             toast("Camera permission needed for the flashlight. Open Commands → Light once to allow it.")
+            sendStatus(TommyStatusEvents.ON, "Tommy is ON")
             return
         }
 
@@ -261,6 +301,7 @@ class FloatingTommyService : Service() {
 
         if (cameraId == null) {
             toast("This phone has no available flashlight")
+            sendStatus(TommyStatusEvents.ON, "Tommy is ON")
             return
         }
 
@@ -268,8 +309,10 @@ class FloatingTommyService : Service() {
             cameraManager.setTorchMode(cameraId, enabled)
             flashlightOn = enabled
             toast(if (enabled) "Flashlight ON" else "Flashlight OFF")
+            sendStatus(TommyStatusEvents.ON, "Tommy is ON")
         } catch (_: Exception) {
             toast("Unable to control flashlight")
+            sendStatus(TommyStatusEvents.ON, "Tommy is ON")
         }
     }
 
@@ -279,6 +322,7 @@ class FloatingTommyService : Service() {
             toast("OK, opening $appName")
             launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             startActivity(launchIntent)
+            sendStatus(TommyStatusEvents.ON, "Tommy is ON")
             return
         }
 
@@ -287,8 +331,10 @@ class FloatingTommyService : Service() {
             startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(fallbackUrl)).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             })
+            sendStatus(TommyStatusEvents.ON, "Tommy is ON")
         } catch (_: Exception) {
             toast("$appName is not available")
+            sendStatus(TommyStatusEvents.ON, "Tommy is ON")
         }
     }
 
@@ -303,14 +349,17 @@ class FloatingTommyService : Service() {
         try {
             toast("OK, opening WhatsApp")
             startActivity(whatsappIntent)
+            sendStatus(TommyStatusEvents.ON, "Tommy is ON")
         } catch (_: Exception) {
             val launchIntent = packageManager.getLaunchIntentForPackage("com.whatsapp")
             if (launchIntent != null) {
                 toast("OK, opening WhatsApp")
                 launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 startActivity(launchIntent)
+                sendStatus(TommyStatusEvents.ON, "Tommy is ON")
             } else {
                 toast("WhatsApp is not installed")
+                sendStatus(TommyStatusEvents.ON, "Tommy is ON")
             }
         }
     }
@@ -349,12 +398,21 @@ class FloatingTommyService : Service() {
         }, 600L)
     }
 
+    private fun sendStatus(status: String, text: String) {
+        sendBroadcast(Intent(TommyStatusEvents.ACTION).apply {
+            setPackage(packageName)
+            putExtra(TommyStatusEvents.EXTRA_STATUS, status)
+            putExtra(TommyStatusEvents.EXTRA_TEXT, text)
+        })
+    }
+
     private fun String.normalizeVoiceText(): String =
         lowercase().replace(Regex("[^a-z0-9 ]"), " ").replace(Regex("\\s+"), " ").trim()
 
     override fun onDestroy() {
         stopping = true
         mainHandler.removeCallbacksAndMessages(null)
+        sendStatus(TommyStatusEvents.OFF, "Tommy is OFF")
         speechRecognizer?.cancel()
         speechRecognizer?.destroy()
         speechRecognizer = null
