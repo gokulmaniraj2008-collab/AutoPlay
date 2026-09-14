@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="phone_automation_service_description">AutoPlay phone automation access. Enable this service only when you want AutoPlay to assist with supported phone tasks.</string>
+</resources>
