@@ -2,10 +2,13 @@ package com.gokul.autoplay
 
 import android.Manifest
 import android.app.Activity
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
@@ -49,16 +52,96 @@ private data class TommyMessage(val fromTommy: Boolean, val text: String)
 @Composable
 fun TommyChatPage() {
     val context = LocalContext.current
-    val messages = remember { mutableStateListOf(TommyMessage(true, "Hi! I'm Tommy. Try: Open Instagram, go to Reels, scroll, like, follow, or open comments.")) }
+    val messages = remember {
+        mutableStateListOf(
+            TommyMessage(true, "Hi! I'm Tommy. Try: Open Instagram, go to Reels, scroll, like, follow, or open comments.")
+        )
+    }
     var input by remember { mutableStateOf("") }
     var isListening by remember { mutableStateOf(false) }
-    var voiceStatus by remember { mutableStateOf("Tap 🎤 and speak") }
+    var voiceStatus by remember { mutableStateOf("Tommy is OFF") }
     val listState = rememberLazyListState()
-    val speechRecognizer = remember(context) { if (SpeechRecognizer.isRecognitionAvailable(context)) SpeechRecognizer.createSpeechRecognizer(context) else null }
+    val speechRecognizer = remember(context) {
+        if (SpeechRecognizer.isRecognitionAvailable(context)) SpeechRecognizer.createSpeechRecognizer(context) else null
+    }
+
+    DisposableEffect(context) {
+        var liveTommyMessageIndex = -1
+
+        fun addTommyMessage(text: String) {
+            if (text.isBlank()) return
+            if (messages.lastOrNull()?.fromTommy == true && messages.lastOrNull()?.text == text) return
+            messages.add(TommyMessage(true, text))
+            liveTommyMessageIndex = -1
+        }
+
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(receiverContext: Context?, intent: Intent?) {
+                if (intent?.action != TommyStatusEvents.ACTION) return
+
+                val status = intent.getStringExtra(TommyStatusEvents.EXTRA_STATUS).orEmpty()
+                val text = intent.getStringExtra(TommyStatusEvents.EXTRA_TEXT).orEmpty()
+                if (text.isBlank()) return
+
+                when (status) {
+                    TommyStatusEvents.LISTENING -> {
+                        voiceStatus = "🎤 $text"
+                        if (text.startsWith("Tommy heard:")) {
+                            val index = liveTommyMessageIndex
+                            if (index >= 0 && index < messages.size && messages[index].fromTommy) {
+                                messages[index] = TommyMessage(true, "🎙️ $text")
+                            } else {
+                                messages.add(TommyMessage(true, "🎙️ $text"))
+                                liveTommyMessageIndex = messages.lastIndex
+                            }
+                        } else {
+                            addTommyMessage("🎤 $text")
+                            liveTommyMessageIndex = messages.lastIndex
+                        }
+                    }
+                    TommyStatusEvents.HEARD -> {
+                        voiceStatus = "Command received"
+                        addTommyMessage("🎙️ $text")
+                    }
+                    TommyStatusEvents.WORKING -> {
+                        voiceStatus = "⚙️ $text"
+                        addTommyMessage("⚙️ $text")
+                    }
+                    TommyStatusEvents.MESSAGE -> {
+                        voiceStatus = "Tommy replied"
+                        addTommyMessage("Tommy: $text")
+                    }
+                    TommyStatusEvents.ON -> {
+                        voiceStatus = "◉ $text"
+                        if (messages.lastOrNull()?.text != "◉ $text") addTommyMessage("◉ $text")
+                    }
+                    TommyStatusEvents.OFF -> {
+                        voiceStatus = "○ $text"
+                        if (messages.lastOrNull()?.text != "○ $text") addTommyMessage("○ $text")
+                    }
+                }
+            }
+        }
+
+        val filter = IntentFilter(TommyStatusEvents.ACTION)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            context.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            @Suppress("DEPRECATION")
+            context.registerReceiver(receiver, filter)
+        }
+
+        onDispose {
+            context.unregisterReceiver(receiver)
+        }
+    }
 
     DisposableEffect(speechRecognizer) {
         speechRecognizer?.setRecognitionListener(object : RecognitionListener {
-            override fun onReadyForSpeech(params: android.os.Bundle?) { isListening = true; voiceStatus = "Listening… speak now" }
+            override fun onReadyForSpeech(params: android.os.Bundle?) {
+                isListening = true
+                voiceStatus = "Listening… speak now"
+            }
             override fun onBeginningOfSpeech() { voiceStatus = "Listening…" }
             override fun onRmsChanged(rmsdB: Float) = Unit
             override fun onBufferReceived(buffer: ByteArray?) = Unit
@@ -74,8 +157,13 @@ fun TommyChatPage() {
             override fun onResults(results: android.os.Bundle?) {
                 isListening = false
                 val spoken = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()?.trim().orEmpty()
-                if (spoken.isNotEmpty()) { input = spoken; voiceStatus = "Command ready"; sendCommand(context, messages, spoken); input = ""; voiceStatus = "Command executed" }
-                else voiceStatus = "No speech detected"
+                if (spoken.isNotEmpty()) {
+                    input = spoken
+                    voiceStatus = "Command ready"
+                    sendCommand(context, messages, spoken)
+                    input = ""
+                    voiceStatus = "Command executed"
+                } else voiceStatus = "No speech detected"
             }
             override fun onPartialResults(partialResults: android.os.Bundle?) {
                 val partial = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty()
@@ -86,10 +174,15 @@ fun TommyChatPage() {
         onDispose { speechRecognizer?.destroy() }
     }
 
-    LaunchedEffect(messages.size) { if (messages.isNotEmpty()) listState.animateScrollToItem(messages.lastIndex) }
+    LaunchedEffect(messages.size) {
+        if (messages.isNotEmpty()) listState.animateScrollToItem(messages.lastIndex)
+    }
 
     fun startVoiceInput() {
-        if (speechRecognizer == null) { voiceStatus = "Speech recognition is unavailable on this phone"; return }
+        if (speechRecognizer == null) {
+            voiceStatus = "Speech recognition is unavailable on this phone"
+            return
+        }
         val activity = context as? Activity
         if (activity != null && activity.checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             activity.requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), 4101)
@@ -107,20 +200,49 @@ fun TommyChatPage() {
 
     fun sendMessage() {
         val command = input.trim()
-        if (command.isNotEmpty()) { sendCommand(context, messages, command); input = ""; voiceStatus = "Tap 🎤 and speak" }
+        if (command.isNotEmpty()) {
+            sendCommand(context, messages, command)
+            input = ""
+            voiceStatus = "Tommy replied"
+        }
     }
 
-    Column(modifier = Modifier.fillMaxSize().imePadding().padding(horizontal = 16.dp, vertical = 20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(
+        modifier = Modifier.fillMaxSize().imePadding().padding(horizontal = 16.dp, vertical = 20.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
         Text("Tommy Chat", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
         Text("Speak commands naturally. Tommy keeps listening for the next action.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        LazyColumn(state = listState, modifier = Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) { items(messages) { ChatBubble(it) } }
+        LazyColumn(
+            state = listState,
+            modifier = Modifier.weight(1f).fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            items(messages) { ChatBubble(it) }
+        }
         Text(voiceStatus, color = if (isListening) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
-            OutlinedTextField(value = input, onValueChange = { input = it }, modifier = Modifier.weight(1f), placeholder = { Text("Message Tommy…") }, singleLine = true, shape = RoundedCornerShape(18.dp))
+            OutlinedTextField(
+                value = input,
+                onValueChange = { input = it },
+                modifier = Modifier.weight(1f),
+                placeholder = { Text("Message Tommy…") },
+                singleLine = true,
+                shape = RoundedCornerShape(18.dp)
+            )
             Spacer(Modifier.width(6.dp))
-            Button(onClick = { if (isListening) speechRecognizer?.stopListening() else startVoiceInput() }, shape = RoundedCornerShape(18.dp), modifier = Modifier.height(56.dp)) { Text(if (isListening) "■" else "🎤") }
+            Button(
+                onClick = { if (isListening) speechRecognizer?.stopListening() else startVoiceInput() },
+                shape = RoundedCornerShape(18.dp),
+                modifier = Modifier.height(56.dp)
+            ) { Text(if (isListening) "■" else "🎤") }
             Spacer(Modifier.width(6.dp))
-            Button(onClick = { sendMessage() }, enabled = input.trim().isNotEmpty(), shape = RoundedCornerShape(18.dp), modifier = Modifier.height(56.dp)) { Text("Send") }
+            Button(
+                onClick = { sendMessage() },
+                enabled = input.trim().isNotEmpty(),
+                shape = RoundedCornerShape(18.dp),
+                modifier = Modifier.height(56.dp)
+            ) { Text("Send") }
         }
     }
 }
@@ -132,8 +254,16 @@ private fun sendCommand(context: Context, messages: MutableList<TommyMessage>, c
 
 @Composable
 private fun ChatBubble(message: TommyMessage) {
-    Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = if (message.fromTommy) Alignment.Start else Alignment.End) {
-        Card(shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = if (message.fromTommy) Color(0xFFEFF5FF) else MaterialTheme.colorScheme.primaryContainer)) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = if (message.fromTommy) Alignment.Start else Alignment.End
+    ) {
+        Card(
+            shape = RoundedCornerShape(18.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = if (message.fromTommy) Color(0xFFEFF5FF) else MaterialTheme.colorScheme.primaryContainer
+            )
+        ) {
             Text(message.text, modifier = Modifier.padding(horizontal = 14.dp, vertical = 11.dp))
         }
     }
@@ -146,7 +276,10 @@ private fun executeTommyChatCommand(context: Context, rawCommand: String): Strin
             launchApp(context, "com.instagram.android", "https://www.instagram.com")
             "OK, opening Instagram full screen. Say 'go reels page' next."
         }
-        command.contains("instagram") -> { launchApp(context, "com.instagram.android", "https://www.instagram.com"); "OK, Instagram opened." }
+        command.contains("instagram") -> {
+            launchApp(context, "com.instagram.android", "https://www.instagram.com")
+            "OK, Instagram opened."
+        }
         (command.contains("reel") || command.contains("reels")) && (command.contains("go") || command.contains("open") || command.contains("show") || command.contains("page")) -> {
             if (tapAccessibilityCommand("OPEN_INSTAGRAM_REELS")) "OK, opening Instagram Reels." else accessibilityRequired()
         }
@@ -177,7 +310,11 @@ private fun tapAccessibilityCommand(action: String): Boolean = TommyAccessibilit
 private fun launchApp(context: Context, packageName: String, fallbackUrl: String) {
     val launchIntent = context.packageManager.getLaunchIntentForPackage(packageName)
     try {
-        if (launchIntent != null) { launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); context.startActivity(launchIntent) }
-        else context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(fallbackUrl)).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) })
+        if (launchIntent != null) {
+            launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            context.startActivity(launchIntent)
+        } else {
+            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(fallbackUrl)).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) })
+        }
     } catch (_: Exception) { }
 }
