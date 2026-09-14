@@ -300,7 +300,7 @@ class CloudMainActivity : ComponentActivity() {
         MaterialTheme {
             Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                 LazyColumn(
-                    modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 8.dp),
+                    modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 8.dp).padding(top = 20.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     item {
