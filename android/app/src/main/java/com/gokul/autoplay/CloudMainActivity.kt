@@ -42,8 +42,8 @@ class CloudMainActivity : ComponentActivity() {
             runOnUiThread {
                 result.onSuccess { count ->
                     scheduleCount = count
-                    CloudAlarmScheduler.sync(this)
-                    status = "Synced $count schedule(s). Alarms are active for enabled schedules."
+                    ExactCloudAlarmScheduler.sync(this)
+                    status = "Synced $count schedule(s). Precise alarms are active for enabled schedules."
                 }.onFailure { error ->
                     scheduleCount = CloudScheduleStore.loadAll(this).size
                     status = "Sync failed: ${error.message ?: "unknown error"}"
