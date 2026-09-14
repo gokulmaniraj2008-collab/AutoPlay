@@ -5,6 +5,7 @@ import android.app.NotificationManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import androidx.core.content.ContextCompat
 import androidx.core.app.NotificationCompat
 import java.time.ZoneId
 import java.time.ZonedDateTime
@@ -13,32 +14,25 @@ class ExactCloudPlaybackReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent?) {
         val id = intent?.getStringExtra("schedule_id") ?: return
         val schedule = CloudScheduleStore.find(context, id) ?: return
-        if (!schedule.enabled || schedule.playlistUrl.isBlank()) return
+        if (!schedule.enabled) return
 
         val zone = runCatching { ZoneId.of(schedule.timezone) }.getOrDefault(ZoneId.of("Asia/Kolkata"))
         val occurrence = "${ZonedDateTime.now(zone).toLocalDate()}-${schedule.time.take(5)}"
         if (CloudScheduleStore.lastOccurrence(context, id) == occurrence) return
         CloudScheduleStore.markOccurrence(context, id, occurrence)
 
-        val spotifyUri = Regex("open\\.spotify\\.com/playlist/([A-Za-z0-9]+)")
-            .find(schedule.playlistUrl)
-            ?.let { "spotify:playlist:${it.groupValues[1]}" }
-            ?: schedule.playlistUrl
-
-        val pending = goAsync()
-        SpotifyPlayback.play(context, spotifyUri) { result ->
-            try {
-                result.onSuccess {
-                    showNotification(context, "AutoPlay playing", schedule.name)
-                }.onFailure { error ->
-                    showNotification(
-                        context,
-                        "Spotify playback failed",
-                        error.message ?: "Open AutoPlay and connect Spotify once"
-                    )
-                }
-            } finally {
-                pending.finish()
+        val track = LocalTrackStore.get(context, id)
+        if (track == null) {
+            showNotification(context, "No local music selected", "Open AutoPlay and choose a song for ${schedule.name}")
+        } else {
+            val playbackIntent = Intent(context, LocalPlaybackService::class.java).apply {
+                putExtra(LocalPlaybackService.EXTRA_URI, track.uri)
+                putExtra(LocalPlaybackService.EXTRA_TITLE, track.name)
+            }
+            runCatching {
+                ContextCompat.startForegroundService(context, playbackIntent)
+            }.onFailure { error ->
+                showNotification(context, "AutoPlay playback failed", error.message ?: "Unable to start music")
             }
         }
 
