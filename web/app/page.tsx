@@ -9,6 +9,7 @@ const examples = [
   { icon: '◎', label: 'Instagram', text: 'Open Instagram and change my bio to "Building with AI"' },
   { icon: '◉', label: 'WhatsApp', text: 'Open WhatsApp and send Praneesh: Hi' },
   { icon: '▶', label: 'YouTube', text: 'Open YouTube' },
+  { icon: '☀', label: 'Flashlight', text: 'Turn on my phone light' },
   { icon: '♫', label: 'Spotify', text: 'At 8 PM, play a Tamil song on Spotify' },
 ];
 
@@ -49,13 +50,13 @@ export default function Home() {
           <p className="welcome-copy">Tell AutoPlay what you want your phone to do. Schedule tasks, open apps and automate supported phone actions from one place.</p>
 
           <div className="feature-list">
-            <div><span>✓</span><div><strong>Natural-language tasks</strong><small>Write commands like “Open YouTube” or “Open WhatsApp and send Praneesh: Hi”.</small></div></div>
+            <div><span>✓</span><div><strong>Natural-language tasks</strong><small>Write commands like “Turn on my phone light” or “Open YouTube”.</small></div></div>
             <div><span>✓</span><div><strong>Scheduled automation</strong><small>Run supported phone tasks at a chosen time through the Android app.</small></div></div>
-            <div><span>✓</span><div><strong>On-device execution</strong><small>Your Android phone performs supported app and UI actions after required permissions.</small></div></div>
+            <div><span>✓</span><div><strong>On-device execution</strong><small>Your Android phone performs supported app and device actions after required permissions.</small></div></div>
           </div>
 
           <button className="primary-button welcome-button" onClick={getStarted}>Get Started <span>→</span></button>
-          <p className="welcome-note">Some app actions require Android permissions and Accessibility access.</p>
+          <p className="welcome-note">Some device actions require Android permissions.</p>
         </section>
       </main>
     );
@@ -92,7 +93,7 @@ export default function Home() {
             value={command}
             onChange={(event) => { setCommand(event.target.value); setMessage(''); }}
             onKeyDown={(event) => { if (event.key === 'Enter') submitTask(); }}
-            placeholder="Try: Open YouTube"
+            placeholder="Try: Turn on my phone light"
             aria-label="Phone automation command"
           />
           <button className="primary-button" onClick={submitTask}>Prepare task <span>→</span></button>
@@ -133,6 +134,7 @@ export default function Home() {
         <div className="card">
           <p className="eyebrow">SUPPORTED AUTOMATION</p>
           <div className="automation-list">
+            <div><strong>☀ Flashlight</strong><span>Turn the phone flashlight on or off with a natural-language command.</span></div>
             <div><strong>💬 WhatsApp</strong><span>Open chats and prepare supported messages.</span></div>
             <div><strong>📸 Instagram</strong><span>Supported UI automation can handle profile actions after Accessibility permission.</span></div>
             <div><strong>▶ YouTube</strong><span>Launch the app from a natural-language command.</span></div>
@@ -149,14 +151,14 @@ export default function Home() {
           <div><strong>01</strong><span>Describe the task in normal language</span></div>
           <div><strong>02</strong><span>AutoPlay prepares the supported phone action</span></div>
           <div><strong>03</strong><span>Open or trigger the Android task</span></div>
-          <div><strong>04</strong><span>Android executes supported intents or UI automation</span></div>
+          <div><strong>04</strong><span>Android executes supported intents or device controls</span></div>
         </div>
       </section>
 
       <section className="card safety-card">
         <p className="eyebrow">IMPORTANT</p>
         <h2>Phone automation stays on your device</h2>
-        <p>The website can create and prepare commands, while actual app interaction happens through the AutoPlay Android app. Instagram and WhatsApp UI automation may require Accessibility permission and can change when those apps update their interfaces.</p>
+        <p>The website can create and prepare commands, while actual device and app interaction happens through the AutoPlay Android app. Flashlight control uses Android camera/torch access; Instagram and WhatsApp UI automation may require Accessibility permission.</p>
       </section>
 
       <button className="reset-onboarding" onClick={() => { localStorage.removeItem(ONBOARDING_KEY); setOnboarding(true); }}>Show Get Started again</button>
