@@ -2,6 +2,7 @@ package com.gokul.autoplay
 
 import android.content.Context
 import org.json.JSONArray
+import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 
@@ -38,6 +39,38 @@ object CloudScheduleSync {
                 }
                 CloudScheduleStore.saveAll(context, schedules)
                 callback(Result.success(schedules.size))
+            } catch (error: Throwable) {
+                callback(Result.failure(error))
+            }
+        }.start()
+    }
+
+    fun setEnabled(context: Context, scheduleId: String, enabled: Boolean, callback: (Result<Unit>) -> Unit) {
+        Thread {
+            try {
+                val endpoint = SupabaseConfig.URL + "/rest/v1/schedules?id=eq.$scheduleId"
+                val connection = (URL(endpoint).openConnection() as HttpURLConnection).apply {
+                    requestMethod = "PATCH"
+                    connectTimeout = 10_000
+                    readTimeout = 10_000
+                    doOutput = true
+                    setRequestProperty("apikey", SupabaseConfig.PUBLISHABLE_KEY)
+                    setRequestProperty("Authorization", "Bearer ${SupabaseConfig.PUBLISHABLE_KEY}")
+                    setRequestProperty("Content-Type", "application/json")
+                    setRequestProperty("Accept", "application/json")
+                    setRequestProperty("Prefer", "return=minimal")
+                }
+                connection.outputStream.use { output ->
+                    output.write(JSONObject().put("enabled", enabled).toString().toByteArray())
+                }
+                val code = connection.responseCode
+                if (code !in 200..299) throw IllegalStateException("Supabase returned HTTP $code")
+
+                val updated = CloudScheduleStore.loadAll(context).map { schedule ->
+                    if (schedule.id == scheduleId) schedule.copy(enabled = enabled) else schedule
+                }
+                CloudScheduleStore.saveAll(context, updated)
+                callback(Result.success(Unit))
             } catch (error: Throwable) {
                 callback(Result.failure(error))
             }
