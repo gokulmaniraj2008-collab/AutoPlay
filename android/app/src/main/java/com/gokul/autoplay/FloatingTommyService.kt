@@ -7,11 +7,11 @@ import android.app.Service
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.PixelFormat
+import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.os.IBinder
 import android.provider.Settings
 import android.view.Gravity
-import android.view.MotionEvent
 import android.view.WindowManager
 import android.widget.TextView
 
@@ -23,28 +23,30 @@ class FloatingTommyService : Service() {
         super.onCreate()
         createNotificationChannel()
         startForeground(NOTIFICATION_ID, buildNotification())
-        if (Settings.canDrawOverlays(this)) {
-            showBubble()
-        } else {
-            stopSelf()
-        }
+        if (Settings.canDrawOverlays(this)) showBubble() else stopSelf()
     }
 
     private fun showBubble() {
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
+
+        val bubbleBackground = GradientDrawable().apply {
+            shape = GradientDrawable.OVAL
+            setColor(Color.rgb(35, 105, 255))
+        }
 
         val view = TextView(this).apply {
             text = "T"
             textSize = 18f
             setTextColor(Color.WHITE)
             gravity = Gravity.CENTER
-            setBackgroundColor(Color.rgb(35, 105, 255))
+            background = bubbleBackground
             elevation = 12f
             setOnClickListener {
-                val intent = Intent(this@FloatingTommyService, MainActivity::class.java).apply {
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                }
-                startActivity(intent)
+                startActivity(
+                    Intent(this@FloatingTommyService, MainActivity::class.java).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                    }
+                )
             }
             setOnLongClickListener {
                 stopSelf()
@@ -62,7 +64,6 @@ class FloatingTommyService : Service() {
         ).apply {
             gravity = Gravity.END or Gravity.CENTER_VERTICAL
             x = (16 * resources.displayMetrics.density).toInt()
-            y = 0
         }
 
         bubble = view
