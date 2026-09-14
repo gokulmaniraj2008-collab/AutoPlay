@@ -64,7 +64,7 @@ fun QuickCommandsPage() {
             openApp(context, "com.instagram.android", "https://www.instagram.com")
         })
         CommandCard("💬", "Open WhatsApp", "Start a WhatsApp message", onClick = {
-            openApp(context, "com.whatsapp", "https://wa.me/")
+            openWhatsApp(context)
         })
 
         Spacer(Modifier.height(2.dp))
@@ -162,6 +162,27 @@ private fun openApp(context: Context, packageName: String, fallbackUrl: String) 
         })
     } catch (_: Exception) {
         Toast.makeText(context, "App is not available", Toast.LENGTH_SHORT).show()
+    }
+}
+
+private fun openWhatsApp(context: Context) {
+    val whatsappIntent = Intent(Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        setPackage("com.whatsapp")
+        putExtra(Intent.EXTRA_TEXT, "")
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    }
+
+    try {
+        context.startActivity(whatsappIntent)
+    } catch (_: Exception) {
+        val launchIntent = context.packageManager.getLaunchIntentForPackage("com.whatsapp")
+        if (launchIntent != null) {
+            launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            context.startActivity(launchIntent)
+        } else {
+            Toast.makeText(context, "WhatsApp is not installed", Toast.LENGTH_SHORT).show()
+        }
     }
 }
 
