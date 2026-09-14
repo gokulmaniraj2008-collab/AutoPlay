@@ -31,16 +31,19 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-          cache: gradle
+
+      - name: Install Gradle
+        working-directory: .
+        run: |
+          curl -fsSL https://services.gradle.org/distributions/gradle-9.0-bin.zip -o /tmp/gradle.zip
+          unzip -q /tmp/gradle.zip -d /tmp
+          echo "/tmp/gradle-9.0/bin" >> "$GITHUB_PATH"
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Make Gradle executable
-        run: chmod +x ./gradlew
-
       - name: Build debug APK
-        run: ./gradlew :app:assembleDebug --stacktrace
+        run: gradle :app:assembleDebug --stacktrace --no-daemon
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
@@ -50,7 +53,7 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      - name: Upload mapping/build outputs when available
+      - name: Upload build reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
