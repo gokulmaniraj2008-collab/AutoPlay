@@ -12,6 +12,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -19,9 +20,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -32,6 +35,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -39,6 +43,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
 
 class CloudMainActivity : ComponentActivity() {
     private var status by mutableStateOf("Ready")
@@ -71,7 +76,7 @@ class CloudMainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         if (Build.VERSION.SDK_INT >= 33) notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
         exactAlarmReady = exactAlarmPermissionGranted()
-        setContent { Home() }
+        setContent { AppRoot() }
         syncCloud()
     }
 
@@ -112,11 +117,8 @@ class CloudMainActivity : ComponentActivity() {
                 result.onSuccess {
                     schedules = CloudScheduleStore.loadAll(this)
                     schedules.firstOrNull { it.id == schedule.id }?.let { updated ->
-                        if (updated.enabled) {
-                            ExactCloudAlarmScheduler.schedule(this, updated)
-                        } else {
-                            ExactCloudAlarmScheduler.cancel(this, updated.id)
-                        }
+                        if (updated.enabled) ExactCloudAlarmScheduler.schedule(this, updated)
+                        else ExactCloudAlarmScheduler.cancel(this, updated.id)
                     }
                     status = if (enabled) "${schedule.name} is ON. It will play at the scheduled time." else "${schedule.name} is OFF."
                 }.onFailure { error ->
@@ -145,6 +147,93 @@ class CloudMainActivity : ComponentActivity() {
     }
 
     @androidx.compose.runtime.Composable
+    private fun AppRoot() {
+        val prefs = getSharedPreferences("autoplay_prefs", MODE_PRIVATE)
+        var showSplash by androidx.compose.runtime.remember { mutableStateOf(true) }
+        var showOnboarding by androidx.compose.runtime.remember { mutableStateOf(!prefs.getBoolean("onboarding_complete", false)) }
+
+        if (showSplash) {
+            SplashScreen()
+            LaunchedEffect(Unit) {
+                delay(1200)
+                showSplash = false
+            }
+        } else if (showOnboarding) {
+            GetStartedScreen {
+                prefs.edit().putBoolean("onboarding_complete", true).apply()
+                showOnboarding = false
+            }
+        } else {
+            Home()
+        }
+    }
+
+    @androidx.compose.runtime.Composable
+    private fun BrandMark(size: Int = 88) {
+        Box(
+            modifier = Modifier.size(size.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Surface(
+                modifier = Modifier.fillMaxSize(),
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.primaryContainer
+            ) {}
+            Text("♫", style = MaterialTheme.typography.displayMedium, fontWeight = FontWeight.Bold)
+        }
+    }
+
+    @androidx.compose.runtime.Composable
+    private fun SplashScreen() {
+        Surface(modifier = Modifier.fillMaxSize()) {
+            Column(
+                modifier = Modifier.fillMaxSize().padding(32.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                BrandMark(104)
+                Spacer(Modifier.height(22.dp))
+                Text("AutoPlay", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(6.dp))
+                Text("Your music. Your time.", style = MaterialTheme.typography.bodyLarge)
+            }
+        }
+    }
+
+    @androidx.compose.runtime.Composable
+    private fun GetStartedScreen(onStarted: () -> Unit) {
+        Surface(modifier = Modifier.fillMaxSize()) {
+            Column(
+                modifier = Modifier.fillMaxSize().padding(28.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                BrandMark(112)
+                Spacer(Modifier.height(28.dp))
+                Text("Welcome to AutoPlay", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    "Schedule music on your Android phone and let AutoPlay play it automatically when the time comes.",
+                    style = MaterialTheme.typography.bodyLarge
+                )
+                Spacer(Modifier.height(24.dp))
+                Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp)) {
+                    Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text("Simple & ₹0", fontWeight = FontWeight.Bold)
+                        Text("• Use music stored on your phone")
+                        Text("• Create daily playback schedules")
+                        Text("• No Spotify subscription required")
+                    }
+                }
+                Spacer(Modifier.height(28.dp))
+                Button(onClick = onStarted, modifier = Modifier.fillMaxWidth().height(54.dp)) {
+                    Text("Get Started", fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    }
+
+    @androidx.compose.runtime.Composable
     private fun Home() {
         MaterialTheme {
             Surface(modifier = Modifier.fillMaxSize()) {
@@ -154,8 +243,14 @@ class CloudMainActivity : ComponentActivity() {
                 ) {
                     item {
                         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Text("AutoPlay", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
-                            Text("Your phone plays your music automatically at the times you choose.", style = MaterialTheme.typography.bodyLarge)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                BrandMark(52)
+                                Spacer(Modifier.size(12.dp))
+                                Column {
+                                    Text("AutoPlay", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                                    Text("Your music. Your time.")
+                                }
+                            }
                         }
                     }
 
@@ -166,7 +261,7 @@ class CloudMainActivity : ComponentActivity() {
                             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
                         ) {
                             Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Text("SETUP", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                                Text("QUICK SETUP", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
                                 Text(if (exactAlarmReady) "✓ Exact-time alarms are ready" else "1. Allow exact-time alarms")
                                 Text("2. Choose a song for each schedule")
                                 Text("3. Turn the schedule ON")
