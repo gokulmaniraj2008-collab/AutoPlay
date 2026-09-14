@@ -2,6 +2,7 @@ package com.gokul.autoplay
 
 import android.Manifest
 import android.accessibilityservice.AccessibilityServiceInfo
+import android.app.SearchManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -19,6 +20,7 @@ object TaskExecutor {
         PhoneTask.Action.CALL -> call(context, task.target)
         PhoneTask.Action.OPEN_APP -> openApp(context, task.target)
         PhoneTask.Action.OPEN_URL -> openUrl(context, task.target)
+        PhoneTask.Action.YOUTUBE_SEARCH -> searchYouTube(context, task.target)
         PhoneTask.Action.SEND_WHATSAPP -> runWhatsAppMessage(context, task.target)
         PhoneTask.Action.EDIT_INSTAGRAM_BIO -> runInstagramBio(context, task.target)
         PhoneTask.Action.FLASHLIGHT_ON -> setFlashlight(context, true)
@@ -26,28 +28,42 @@ object TaskExecutor {
         PhoneTask.Action.UNKNOWN -> Result(false, "Unsupported task")
     }
 
-    private fun setFlashlight(context: Context, enabled: Boolean): Result {
-        if (!context.packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_FLASH)) {
-            return Result(false, "This phone does not report a camera flash/torch.")
-        }
-        if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
-            return Result(false, "Camera permission is required once before AutoPlay can control the flashlight.")
-        }
+    private fun searchYouTube(context: Context, query: String): Result {
+        val value = query.trim().ifBlank { "Tamil songs" }
+        val launch = context.packageManager.getLaunchIntentForPackage("com.google.android.youtube")
+        if (launch == null) return Result(false, "YouTube is not installed")
 
+        return runCatching {
+            val search = Intent(Intent.ACTION_SEARCH).apply {
+                setPackage("com.google.android.youtube")
+                putExtra(SearchManager.QUERY, value)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            if (search.resolveActivity(context.packageManager) != null) {
+                context.startActivity(search)
+            } else {
+                launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                context.startActivity(launch)
+                val url = Uri.parse("https://www.youtube.com/results?search_query=${Uri.encode(value)}")
+                context.startActivity(Intent(Intent.ACTION_VIEW, url).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) })
+            }
+            Result(true, "Searching YouTube for: $value")
+        }.getOrElse {
+            Result(false, "YouTube search could not be opened: ${it.message ?: "unknown error"}")
+        }
+    }
+
+    private fun setFlashlight(context: Context, enabled: Boolean): Result {
+        if (!context.packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_FLASH)) return Result(false, "This phone does not report a camera flash/torch.")
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) return Result(false, "Camera permission is required once before AutoPlay can control the flashlight.")
         val cameraManager = context.getSystemService(Context.CAMERA_SERVICE) as CameraManager
         val cameraId = runCatching {
-            cameraManager.cameraIdList.firstOrNull { id ->
-                cameraManager.getCameraCharacteristics(id)
-                    .get(CameraCharacteristics.FLASH_INFO_AVAILABLE) == true
-            }
+            cameraManager.cameraIdList.firstOrNull { id -> cameraManager.getCameraCharacteristics(id).get(CameraCharacteristics.FLASH_INFO_AVAILABLE) == true }
         }.getOrNull() ?: return Result(false, "AutoPlay could not access a flashlight camera.")
-
         return runCatching {
             cameraManager.setTorchMode(cameraId, enabled)
             Result(true, if (enabled) "Phone flashlight turned on." else "Phone flashlight turned off.")
-        }.getOrElse {
-            Result(false, "Android could not change the flashlight: ${it.message ?: "unknown error"}")
-        }
+        }.getOrElse { Result(false, "Android could not change the flashlight: ${it.message ?: "unknown error"}") }
     }
 
     private fun openSpotifyTarget(context: Context): Result {
