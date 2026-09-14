@@ -11,13 +11,19 @@ import java.time.ZonedDateTime
 
 object ExactCloudAlarmScheduler {
     fun schedule(context: Context, schedule: CloudScheduleStore.Schedule) {
+        if (!schedule.enabled || LocalTrackStore.get(context, schedule.id) == null) return
         val zone = runCatching { ZoneId.of(schedule.timezone) }.getOrDefault(ZoneId.of("Asia/Kolkata"))
         val time = runCatching { LocalTime.parse(schedule.time.take(5)) }.getOrDefault(LocalTime.of(15, 0))
         val now = ZonedDateTime.now(zone)
         var next = now.withHour(time.hour).withMinute(time.minute).withSecond(0).withNano(0)
         if (!next.isAfter(now)) next = next.plusDays(1)
         val intent = Intent(context, ExactCloudPlaybackReceiver::class.java).putExtra("schedule_id", schedule.id)
-        val pending = PendingIntent.getBroadcast(context, schedule.id.hashCode() and 0x7fffffff, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        val pending = PendingIntent.getBroadcast(
+            context,
+            schedule.id.hashCode() and 0x7fffffff,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
         val alarms = context.getSystemService(AlarmManager::class.java)
         val millis = next.toInstant().toEpochMilli()
         if (Build.VERSION.SDK_INT >= 31 && alarms.canScheduleExactAlarms()) {
@@ -28,6 +34,8 @@ object ExactCloudAlarmScheduler {
     }
 
     fun sync(context: Context) {
-        CloudScheduleStore.loadAll(context).filter { it.enabled && it.playlistUrl.isNotBlank() }.forEach { schedule(context, it) }
+        CloudScheduleStore.loadAll(context)
+            .filter { it.enabled && LocalTrackStore.get(context, it.id) != null }
+            .forEach { schedule(context, it) }
     }
 }
