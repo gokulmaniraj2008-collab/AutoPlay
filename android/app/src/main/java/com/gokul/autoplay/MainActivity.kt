@@ -12,7 +12,6 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -30,7 +29,6 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -57,24 +55,13 @@ class MainActivity : ComponentActivity() {
 
     private fun activateFloatingTommy() {
         if (!Settings.canDrawOverlays(this)) {
-            startActivity(
-                Intent(
-                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                    Uri.parse("package:$packageName")
-                )
-            )
+            startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
             return
         }
-
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-            startActivity(
-                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                    data = Uri.parse("package:$packageName")
-                }
-            )
+            startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply { data = Uri.parse("package:$packageName") })
             return
         }
-
         ContextCompat.startForegroundService(this, Intent(this, FloatingTommyService::class.java))
         Toast.makeText(this, "Tommy is ready", Toast.LENGTH_SHORT).show()
     }
@@ -86,68 +73,45 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun AutoPlayApp(
-    onTommyStart: () -> Unit,
-    onTommyStop: () -> Unit
-) {
-    var selectedTab by remember { mutableIntStateOf(0) }
+private fun AutoPlayApp(onTommyStart: () -> Unit, onTommyStop: () -> Unit) {
+    var page by remember { mutableIntStateOf(0) }
     var tommyEnabled by remember { mutableStateOf(false) }
 
-    val startTommy: () -> Unit = {
+    val startTommy = {
         tommyEnabled = true
         onTommyStart()
     }
-
-    val stopTommy: () -> Unit = {
+    val stopTommy = {
         tommyEnabled = false
         onTommyStop()
     }
 
     MaterialTheme {
-        Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+        Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
             Scaffold(
                 bottomBar = {
                     NavigationBar {
-                        NavigationBarItem(
-                            selected = selectedTab == 0,
-                            onClick = { selectedTab = 0 },
-                            icon = { Text("⌂") },
-                            label = { Text("Home") }
-                        )
-                        NavigationBarItem(
-                            selected = selectedTab == 1,
-                            onClick = { selectedTab = 1 },
-                            icon = { Text("⚡") },
-                            label = { Text("Commands") }
-                        )
-                        NavigationBarItem(
-                            selected = selectedTab == 2,
-                            onClick = { selectedTab = 2 },
-                            icon = { Text("⚙") },
-                            label = { Text("Settings") }
-                        )
+                        NavigationBarItem(page == 0, { page = 0 }, icon = { Text("⌂") }, label = { Text("Home") })
+                        NavigationBarItem(page == 1, { page = 1 }, icon = { Text("⚡") }, label = { Text("Commands") })
+                        NavigationBarItem(page == 5, { page = 5 }, icon = { Text("T") }, label = { Text("Tommy") })
                     }
                 }
-            ) { innerPadding ->
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(innerPadding)
-                ) {
-                    when (selectedTab) {
-                        0 -> AutoPlayHome(
-                            onAddSchedule = { selectedTab = 3 },
-                            onTestNow = startTommy,
-                            onTommyClick = startTommy
-                        )
-                        1 -> QuickCommandsPage()
-                        2 -> AutoPlaySettings(
-                            tommyEnabled = tommyEnabled,
-                            onTommyEnabledChange = { enabled ->
-                                if (enabled) startTommy() else stopTommy()
-                            }
-                        )
+            ) { padding ->
+                Box(Modifier.fillMaxSize().padding(padding)) {
+                    when (page) {
+                        0 -> HomePage(onOpenPages = { page = 1 }, onTommy = startTommy)
+                        1 -> PageIndex(onSelectPage = { page = it })
+                        2 -> QuickCommandsPage()
                         3 -> AutomationPage()
+                        4 -> BackgroundSearchPage()
+                        5 -> VoiceAssistantPage()
+                        6 -> FloatingAssistantPage()
+                    }
+
+                    when (page) {
+                        4 -> BottomAction("Enable Tommy floating mode", startTommy)
+                        5 -> BottomAction(if (tommyEnabled) "Tommy is ON — Turn OFF" else "Start Hey Tommy", if (tommyEnabled) stopTommy else startTommy)
+                        6 -> BottomAction("Enable draggable Tommy bubble", startTommy)
                     }
                 }
             }
@@ -156,117 +120,52 @@ private fun AutoPlayApp(
 }
 
 @Composable
-private fun AutoPlayHome(
-    onAddSchedule: () -> Unit,
-    onTestNow: () -> Unit,
-    onTommyClick: () -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 20.dp, vertical = 40.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
+private fun HomePage(onOpenPages: () -> Unit, onTommy: () -> Unit) {
+    Column(Modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 32.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Text("AutoPlay", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
-        Text(
-            "Your music. Your commands. Automatically.",
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(24.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
-        ) {
-            Column(modifier = Modifier.padding(20.dp)) {
+        Text("Your music. Your commands. Automatically.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
+            Column(Modifier.padding(20.dp)) {
                 Text("READY TO PLAY", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(8.dp))
-                Text("No active automation", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(4.dp))
-                Text("Create a schedule or test AutoPlay instantly.")
+                Text("Six functional app pages", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Text("Commands, automation, background mode, floating Tommy and voice control.")
             }
         }
+        Button(onClick = onOpenPages, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) { Text("Open Pages 2–6") }
+        OutlinedButton(onClick = onTommy, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) { Text("Start Tommy") }
+    }
+}
 
-        Text("Quick actions", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-
-        Row(modifier = Modifier.fillMaxWidth()) {
-            Button(
-                onClick = onAddSchedule,
-                modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(16.dp)
-            ) { Text("Add schedule") }
-            Spacer(Modifier.width(10.dp))
-            OutlinedButton(
-                onClick = onTestNow,
-                modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(16.dp)
-            ) { Text("Test now") }
-        }
-
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(20.dp)
-        ) {
-            Column(modifier = Modifier.padding(18.dp)) {
-                Text("Next automation", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Spacer(Modifier.height(6.dp))
-                Text("No schedule yet", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                Text("Add your first music automation to get started.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+@Composable
+private fun PageIndex(onSelectPage: (Int) -> Unit) {
+    val pages = listOf(
+        2 to "Quick Commands" to "Light, YouTube, Instagram and WhatsApp",
+        3 to "Automations" to "Automation controls and routines",
+        4 to "Background Search" to "Keep Tommy available over other apps",
+        6 to "Floating Assistant" to "Draggable floating Tommy bubble",
+        5 to "Hey Tommy" to "Wake phrase and voice commands"
+    )
+    Column(Modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 28.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text("Pages 2–6", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+        Text("Each page now has a direct navigation path.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        pages.forEach { (pageAndTitle, description) ->
+            val pageNumber = pageAndTitle.first
+            val title = pageAndTitle.second
+            Card(onClick = { onSelectPage(pageNumber) }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp)) {
+                Column(Modifier.padding(18.dp)) {
+                    Text("PAGE $pageNumber", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                    Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    Text(description, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
-        }
-
-        Spacer(Modifier.weight(1f))
-        Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-            FloatingActionButton(
-                onClick = onTommyClick,
-                shape = RoundedCornerShape(18.dp)
-            ) { Text("Tommy", fontWeight = FontWeight.Bold) }
         }
     }
 }
 
 @Composable
-private fun AutoPlaySettings(
-    tommyEnabled: Boolean,
-    onTommyEnabledChange: (Boolean) -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 20.dp, vertical = 28.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        Text("Settings", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-        Text("Control Tommy permissions and app behavior.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-
-        Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(22.dp)) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(18.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("Tommy assistant", fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        if (tommyEnabled) "Tommy is ON. Voice listening and the floating bubble are active." else "Tommy is OFF. Voice listening and the floating bubble are stopped."
-                    )
-                }
-                Switch(
-                    checked = tommyEnabled,
-                    onCheckedChange = onTommyEnabledChange
-                )
-            }
-        }
-
-        Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(22.dp)) {
-            Column(modifier = Modifier.padding(18.dp)) {
-                Text("Permissions", fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(6.dp))
-                Text("Tommy uses microphone access for Hey Tommy voice listening and overlay access for the floating bubble.")
-            }
-        }
+private fun BottomAction(label: String, action: () -> Unit) {
+    Box(Modifier.fillMaxSize().padding(16.dp), contentAlignment = Alignment.BottomCenter) {
+        Button(onClick = action, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) { Text(label) }
     }
 }
