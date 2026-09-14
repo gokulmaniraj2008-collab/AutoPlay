@@ -13,6 +13,8 @@ object TaskParser {
         val lower = raw.lowercase(Locale.getDefault())
 
         val action = when {
+            isInstagramBioCommand(lower) -> PhoneTask.Action.EDIT_INSTAGRAM_BIO
+            isWhatsAppMessageCommand(lower) -> PhoneTask.Action.SEND_WHATSAPP
             "spotify" in lower || "song" in lower || "music" in lower -> PhoneTask.Action.PLAY_SPOTIFY
             "call " in lower || lower.startsWith("call") -> PhoneTask.Action.CALL
             "open " in lower || "launch " in lower -> PhoneTask.Action.OPEN_APP
@@ -21,13 +23,15 @@ object TaskParser {
         }
 
         if (action == PhoneTask.Action.UNKNOWN) {
-            return ParseResult(null, "I don't know that action yet. Try: play Spotify, call a number, open an app, or open a URL.")
+            return ParseResult(null, "Try: open WhatsApp and send Praneesh Hi, change Instagram bio to ..., open Instagram, or open another app.")
         }
 
         val scheduledAt = parseTime(raw, nowMillis)
         val target = when (action) {
             PhoneTask.Action.CALL -> raw.replace(Regex("(?i)\\bcall\\b"), "").replace(Regex("(?i)\\bat\\b.*$"), "").trim()
             PhoneTask.Action.OPEN_APP -> raw.replace(Regex("(?i)\\b(open|launch)\\b"), "").replace(Regex("(?i)\\bat\\b.*$"), "").trim()
+            PhoneTask.Action.SEND_WHATSAPP -> parseWhatsAppTarget(raw)
+            PhoneTask.Action.EDIT_INSTAGRAM_BIO -> parseInstagramBio(raw)
             else -> raw
         }
 
@@ -40,6 +44,28 @@ object TaskParser {
             enabled = true
         )
         return ParseResult(task, if (scheduledAt == null) "Ready to run now." else "Scheduled for ${java.text.SimpleDateFormat("dd MMM, h:mm a", Locale.getDefault()).format(scheduledAt)}.")
+    }
+
+    private fun isWhatsAppMessageCommand(lower: String): Boolean =
+        "whatsapp" in lower && ("send" in lower || "message" in lower || "text" in lower)
+
+    private fun isInstagramBioCommand(lower: String): Boolean =
+        "instagram" in lower && "bio" in lower && ("change" in lower || "edit" in lower || "set" in lower || "update" in lower)
+
+    /** Stores recipient and message as: recipient|||message */
+    private fun parseWhatsAppTarget(raw: String): String {
+        val match = Regex("(?is)(?:whatsapp.*?)(?:friend|contact)?\\s*[(:]?\\s*([^:)]+?)\\s*\\)?\\s+(?:and\\s+)?(?:send|message|text)\\s+(.+)$").find(raw)
+            ?: Regex("(?is)(?:send|message|text)\\s+(?:to\\s+)?(?:my\\s+friend\\s+)?[(:]?\\s*([^:)]+?)\\s*\\)?\\s+(.+)$").find(raw)
+        if (match != null) {
+            return "${match.groupValues[1].trim()}|||${match.groupValues[2].trim()}"
+        }
+        return "|||"
+    }
+
+    private fun parseInstagramBio(raw: String): String {
+        return Regex("(?is)(?:change|edit|set|update).*?instagram.*?bio\\s*(?:to|as|:)?\\s*(.+)$").find(raw)?.groupValues?.get(1)?.trim()
+            ?: Regex("(?is)bio\\s*(?:to|as|:)?\\s*(.+)$").find(raw)?.groupValues?.get(1)?.trim()
+            ?: ""
     }
 
     private fun parseTime(raw: String, nowMillis: Long): Long? {
