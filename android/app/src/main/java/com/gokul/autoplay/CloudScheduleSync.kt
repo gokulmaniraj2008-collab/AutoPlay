@@ -15,9 +15,13 @@ object CloudScheduleSync {
             doOutput = body != null
             setRequestProperty("apikey", SupabaseConfig.PUBLISHABLE_KEY)
             setRequestProperty("Authorization", "Bearer ${SupabaseConfig.PUBLISHABLE_KEY}")
-            setRequestProperty("Content-Type", "application/json")
+            setRequestProperty("Content-Type", "application/json; charset=utf-8")
             setRequestProperty("Accept", "application/json")
-            if (body != null) setRequestProperty("Prefer", if (returnRepresentation) "return=representation" else "return=minimal")
+            if (body != null) {
+                setRequestProperty("Content-Length", body.toByteArray(Charsets.UTF_8).size.toString())
+                setRequestProperty("Prefer", if (returnRepresentation) "return=representation" else "return=minimal")
+                outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
+            }
         }
     }
 
@@ -68,9 +72,9 @@ object CloudScheduleSync {
                 val id = java.util.UUID.randomUUID().toString()
                 val body = JSONObject().apply {
                     put("id", id)
-                    put("name", name)
+                    put("name", name.trim())
                     put("scheduled_date", scheduledDate ?: JSONObject.NULL)
-                    put("time", time)
+                    put("time", time.take(5))
                     put("playlist_url", "")
                     put("enabled", enabled)
                     put("timezone", timezone)
