@@ -1,8 +1,12 @@
 package com.gokul.autoplay
 
 import android.Manifest
+import android.app.AlarmManager
+import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -24,6 +28,7 @@ import androidx.compose.ui.unit.dp
 class CloudMainActivity : ComponentActivity() {
     private var status by mutableStateOf("Cloud schedules not synced")
     private var scheduleCount by mutableStateOf(0)
+    private var exactAlarmReady by mutableStateOf(false)
 
     private val notificationPermission = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -32,8 +37,23 @@ class CloudMainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         if (Build.VERSION.SDK_INT >= 33) notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        exactAlarmReady = exactAlarmPermissionGranted()
         setContent { Home() }
         syncCloud()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        exactAlarmReady = exactAlarmPermissionGranted()
+    }
+
+    private fun exactAlarmPermissionGranted(): Boolean =
+        Build.VERSION.SDK_INT < 31 || getSystemService(AlarmManager::class.java).canScheduleExactAlarms()
+
+    private fun requestExactAlarmPermission() {
+        if (Build.VERSION.SDK_INT >= 31) {
+            startActivity(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:$packageName")))
+        }
     }
 
     private fun syncCloud() {
@@ -43,7 +63,7 @@ class CloudMainActivity : ComponentActivity() {
                 result.onSuccess { count ->
                     scheduleCount = count
                     ExactCloudAlarmScheduler.sync(this)
-                    status = "Synced $count schedule(s). Precise alarms are active for enabled schedules."
+                    status = "Synced $count schedule(s)."
                 }.onFailure { error ->
                     scheduleCount = CloudScheduleStore.loadAll(this).size
                     status = "Sync failed: ${error.message ?: "unknown error"}"
@@ -63,7 +83,13 @@ class CloudMainActivity : ComponentActivity() {
                     Text("AutoPlay", style = MaterialTheme.typography.headlineLarge)
                     Text("Cloud-controlled Spotify scheduling")
                     Text("Schedules on device: $scheduleCount")
+                    Text(if (exactAlarmReady) "✓ Precise alarms enabled" else "⚠ Precise alarms permission required")
                     Text(status, style = MaterialTheme.typography.bodyMedium)
+                    if (!exactAlarmReady) {
+                        Button(onClick = { requestExactAlarmPermission() }, modifier = Modifier.fillMaxWidth()) {
+                            Text("Allow precise schedule alarms")
+                        }
+                    }
                     Button(onClick = { syncCloud() }, modifier = Modifier.fillMaxWidth()) {
                         Text("Sync from Supabase")
                     }
