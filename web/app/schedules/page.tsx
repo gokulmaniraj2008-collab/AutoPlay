@@ -3,7 +3,11 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { supabase, Schedule } from '../../lib/supabase';
 
-const EMPTY = { name: 'Morning music', time: '07:00', playlist_url: '', enabled: true };
+function today() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+const EMPTY = { name: 'Morning music', scheduled_date: today(), time: '07:00', playlist_url: '', enabled: true };
 
 function formatTime(value: string) {
   const match = value.match(/^(\d{1,2}):(\d{2})/);
@@ -12,6 +16,12 @@ function formatTime(value: string) {
   const minute = match[2];
   const suffix = hour >= 12 ? 'PM' : 'AM';
   return `${hour % 12 || 12}:${minute} ${suffix}`;
+}
+
+function formatDate(value?: string | null) {
+  if (!value) return 'Every day';
+  const date = new Date(`${value}T00:00:00`);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
 export default function SchedulesPage() {
@@ -24,7 +34,7 @@ export default function SchedulesPage() {
 
   async function load() {
     if (!supabase) { setMessage('Connect Supabase to sync schedules.'); setLoading(false); return; }
-    const { data, error } = await supabase.from('schedules').select('*').order('time');
+    const { data, error } = await supabase.from('schedules').select('*').order('scheduled_date', { ascending: true, nullsFirst: false }).order('time');
     if (error) setMessage(error.message); else setSchedules(data ?? []);
     setLoading(false);
   }
@@ -36,10 +46,10 @@ export default function SchedulesPage() {
     if (!supabase) return setMessage('Missing Supabase environment variables.');
     setSaving(true); setMessage('');
     const { error } = await supabase.from('schedules').insert({
-      name: form.name.trim(), time: form.time, playlist_url: form.playlist_url.trim(), enabled: form.enabled,
+      name: form.name.trim(), scheduled_date: form.scheduled_date || null, time: form.time, playlist_url: form.playlist_url.trim(), enabled: form.enabled,
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     });
-    if (error) setMessage(error.message); else { setForm(EMPTY); setMessage('Schedule created.'); await load(); }
+    if (error) setMessage(error.message); else { setForm({ ...EMPTY, scheduled_date: today() }); setMessage('Schedule created.'); await load(); }
     setSaving(false);
   }
 
@@ -48,7 +58,7 @@ export default function SchedulesPage() {
     if (!supabase || !editing) return;
     setSaving(true); setMessage('');
     const { error } = await supabase.from('schedules').update({
-      name: editing.name.trim(), time: editing.time.slice(0, 5), playlist_url: editing.playlist_url.trim(), enabled: editing.enabled,
+      name: editing.name.trim(), scheduled_date: editing.scheduled_date || null, time: editing.time.slice(0, 5), playlist_url: editing.playlist_url.trim(), enabled: editing.enabled,
       updated_at: new Date().toISOString(),
     }).eq('id', editing.id);
     if (error) setMessage(error.message); else { setEditing(null); setMessage('Schedule updated.'); await load(); }
@@ -70,7 +80,7 @@ export default function SchedulesPage() {
   return (
     <main>
       <div className="page-head">
-        <div><p className="eyebrow">AUTOPLAY · CLOUD SYNC</p><h1>Schedules</h1><p>Create, view, edit, enable, disable and delete automations.</p></div>
+        <div><p className="eyebrow">AUTOPLAY · CLOUD SYNC</p><h1>Schedules</h1><p>Create, view, edit, enable, disable and delete automations with a date and exact time.</p></div>
         <a className="back" href="/">Dashboard</a>
       </div>
 
@@ -78,6 +88,7 @@ export default function SchedulesPage() {
         <form className="card form-card" onSubmit={addSchedule}>
           <h2>Create schedule</h2>
           <label>Name<input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} required /></label>
+          <label>Date<input type="date" value={form.scheduled_date} min={today()} onChange={e => setForm({ ...form, scheduled_date: e.target.value })} required /></label>
           <label>Time<input type="time" value={form.time} onChange={e => setForm({ ...form, time: e.target.value })} required /></label>
           <label>Spotify URL <span>(optional)</span><input type="url" placeholder="Optional — local Android music needs no URL" value={form.playlist_url} onChange={e => setForm({ ...form, playlist_url: e.target.value })} /></label>
           <button disabled={saving}>{saving ? 'Creating…' : 'Create schedule'}</button>
@@ -88,7 +99,7 @@ export default function SchedulesPage() {
           <div className="section-title"><div><h2>Your schedules</h2><p>Shared through Supabase with Android</p></div><span className="pill">{schedules.length}</span></div>
           {loading ? <p>Loading…</p> : schedules.length === 0 ? <div className="empty">No schedules yet. Create your first one.</div> : <div className="schedule-list">{schedules.map(item => (
             <article className="schedule" key={item.id}>
-              <div><strong>{formatTime(item.time)}</strong><h3>{item.name}</h3><span className="status">{item.enabled ? '● Enabled' : '○ Disabled'}</span>{item.playlist_url && <a href={item.playlist_url} target="_blank" rel="noreferrer">Open Spotify playlist</a>}</div>
+              <div><strong>{formatDate(item.scheduled_date)}</strong><h3>{formatTime(item.time)}</h3><span>{item.name}</span><br /><span className="status">{item.enabled ? '● Enabled' : '○ Disabled'}</span>{item.playlist_url && <><br /><a href={item.playlist_url} target="_blank" rel="noreferrer">Open Spotify playlist</a></>}</div>
               <div className="actions"><button className="secondary" onClick={() => toggle(item.id, item.enabled)}>{item.enabled ? 'Disable' : 'Enable'}</button><button className="secondary" onClick={() => setEditing({ ...item })}>Edit</button><button className="danger" onClick={() => remove(item.id)}>Delete</button></div>
             </article>
           ))}</div>}
@@ -100,6 +111,7 @@ export default function SchedulesPage() {
           <h2>Edit schedule</h2>
           <p>Changes sync to the Android app.</p>
           <label>Name<input value={editing.name} onChange={e => setEditing({ ...editing, name: e.target.value })} required /></label>
+          <label>Date<input type="date" value={editing.scheduled_date || ''} min={today()} onChange={e => setEditing({ ...editing, scheduled_date: e.target.value || null })} required /></label>
           <label>Time<input type="time" value={editing.time.slice(0, 5)} onChange={e => setEditing({ ...editing, time: e.target.value })} required /></label>
           <label>Spotify URL <span>(optional)</span><input type="url" value={editing.playlist_url || ''} onChange={e => setEditing({ ...editing, playlist_url: e.target.value })} /></label>
           <label className="check"><input type="checkbox" checked={editing.enabled} onChange={e => setEditing({ ...editing, enabled: e.target.checked })} /> Enabled</label>
