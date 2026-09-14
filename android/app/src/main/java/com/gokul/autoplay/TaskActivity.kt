@@ -3,10 +3,14 @@ package com.gokul.autoplay
 import android.Manifest
 import android.app.AlarmManager
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.speech.RecognitionListener
+import android.speech.RecognizerIntent
+import android.speech.SpeechRecognizer
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -34,23 +38,34 @@ import java.util.Date
 import java.util.Locale
 
 /**
- * Unified AutoPlay hub: AI phone tasks, scheduled automation, permissions,
- * Spotify entry point, calls, app launching, and the existing cloud schedules
- * all remain inside the same AutoPlay application.
+ * Unified AutoPlay hub: AI phone tasks, voice commands, scheduled automation,
+ * permissions, Spotify entry point, calls, app launching, and existing schedules.
  */
 class TaskActivity : ComponentActivity() {
     private var command by mutableStateOf("")
     private var status by mutableStateOf("Ready — tell AutoPlay what to do on your phone.")
     private var lastResult by mutableStateOf("")
+    private var listening by mutableStateOf(false)
+    private var speechRecognizer: SpeechRecognizer? = null
 
     private val callPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         status = if (granted) "Phone-call permission granted." else "Phone-call permission was not granted."
+    }
+
+    private val audioPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) startVoiceInput() else status = "Microphone permission is required for voice commands."
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         lastResult = TaskHistoryStore.last(this)
         setContent { Screen() }
+    }
+
+    override fun onDestroy() {
+        speechRecognizer?.destroy()
+        speechRecognizer = null
+        super.onDestroy()
     }
 
     private fun submitTask() {
@@ -79,18 +94,66 @@ class TaskActivity : ComponentActivity() {
         command = ""
     }
 
+    private fun startVoiceInput() {
+        if (!SpeechRecognizer.isRecognitionAvailable(this)) {
+            status = "No speech recognition service is available on this phone."
+            return
+        }
+        speechRecognizer?.destroy()
+        speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this).also { recognizer ->
+            recognizer.setRecognitionListener(object : RecognitionListener {
+                override fun onReadyForSpeech(params: Bundle?) {
+                    listening = true
+                    status = "Listening… say: Open YouTube"
+                }
+                override fun onBeginningOfSpeech() { status = "Listening…" }
+                override fun onRmsChanged(rmsdB: Float) = Unit
+                override fun onBufferReceived(buffer: ByteArray?) = Unit
+                override fun onEndOfSpeech() { listening = false; status = "Processing command…" }
+                override fun onError(error: Int) {
+                    listening = false
+                    status = "Voice input failed (code $error). Tap Speak Task and try again."
+                }
+                override fun onResults(results: Bundle?) {
+                    listening = false
+                    val spoken = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                        ?.firstOrNull().orEmpty()
+                    if (spoken.isBlank()) {
+                        status = "I didn't catch that. Try: Open YouTube."
+                    } else {
+                        command = spoken
+                        status = "Heard: $spoken"
+                        submitTask()
+                    }
+                }
+                override fun onPartialResults(partialResults: Bundle?) = Unit
+                override fun onEvent(eventType: Int, params: Bundle?) = Unit
+            })
+            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
+                putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
+                putExtra(RecognizerIntent.EXTRA_PROMPT, "Say a phone task")
+            }
+            recognizer.startListening(intent)
+        }
+    }
+
+    private fun requestVoiceCommand() {
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+            startVoiceInput()
+        } else {
+            audioPermission.launch(Manifest.permission.RECORD_AUDIO)
+        }
+    }
+
     private fun exactAlarmReady(): Boolean =
         Build.VERSION.SDK_INT < 31 ||
             getSystemService(AlarmManager::class.java).canScheduleExactAlarms()
 
     private fun requestExactAlarmPermission() {
         if (Build.VERSION.SDK_INT >= 31) {
-            startActivity(
-                Intent(
-                    Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
-                    Uri.parse("package:$packageName")
-                )
-            )
+            startActivity(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:$packageName")))
         }
     }
 
@@ -107,26 +170,15 @@ class TaskActivity : ComponentActivity() {
         MaterialTheme {
             Surface(Modifier.fillMaxSize()) {
                 Column(
-                    Modifier
-                        .fillMaxSize()
-                        .verticalScroll(rememberScrollState())
-                        .padding(20.dp),
+                    Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
                     Text("AutoPlay", style = MaterialTheme.typography.headlineLarge)
-                    Text(
-                        "Your AI phone automation hub",
-                        style = MaterialTheme.typography.titleMedium
-                    )
-                    Text(
-                        "Give one command. AutoPlay understands it, runs it now, or schedules it for later."
-                    )
+                    Text("Your AI phone automation hub", style = MaterialTheme.typography.titleMedium)
+                    Text("Give one command. AutoPlay understands it, runs it now, or schedules it for later.")
 
                     Card(Modifier.fillMaxWidth()) {
-                        Column(
-                            Modifier.padding(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
+                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                             Text("AI Phone Task", style = MaterialTheme.typography.titleLarge)
                             OutlinedTextField(
                                 value = command,
@@ -134,60 +186,52 @@ class TaskActivity : ComponentActivity() {
                                 modifier = Modifier.fillMaxWidth(),
                                 minLines = 3,
                                 label = { Text("What should your phone do?") },
-                                placeholder = { Text("At 8 PM play a Tamil song on Spotify") }
+                                placeholder = { Text("Open YouTube") }
                             )
-                            Button(
-                                onClick = { submitTask() },
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
+                            Button(onClick = { submitTask() }, modifier = Modifier.fillMaxWidth()) {
                                 Text("Run / Schedule")
+                            }
+                            Button(
+                                onClick = { requestVoiceCommand() },
+                                modifier = Modifier.fillMaxWidth(),
+                                enabled = !listening
+                            ) {
+                                Text(if (listening) "Listening…" else "🎙 Speak Task")
                             }
                         }
                     }
 
                     Card(Modifier.fillMaxWidth()) {
-                        Column(
-                            Modifier.padding(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
+                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                             Text("Phone Access", style = MaterialTheme.typography.titleLarge)
                             Text("AutoPlay only uses Android capabilities you explicitly authorize.")
-                            OutlinedButton(
-                                onClick = { requestCallPermission() },
-                                modifier = Modifier.fillMaxWidth()
-                            ) { Text("Allow phone calls") }
-                            OutlinedButton(
-                                onClick = { requestExactAlarmPermission() },
-                                modifier = Modifier.fillMaxWidth()
-                            ) { Text("Allow exact-time automation") }
+                            OutlinedButton(onClick = { requestCallPermission() }, modifier = Modifier.fillMaxWidth()) {
+                                Text("Allow phone calls")
+                            }
+                            OutlinedButton(onClick = { requestExactAlarmPermission() }, modifier = Modifier.fillMaxWidth()) {
+                                Text("Allow exact-time automation")
+                            }
                         }
                     }
 
                     Card(Modifier.fillMaxWidth()) {
-                        Column(
-                            Modifier.padding(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
+                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                             Text("Existing AutoPlay", style = MaterialTheme.typography.titleLarge)
                             Text("Your existing cloud/local music schedules remain available in the same app.")
-                            OutlinedButton(
-                                onClick = { openSchedules() },
-                                modifier = Modifier.fillMaxWidth()
-                            ) { Text("Open schedules") }
+                            OutlinedButton(onClick = { openSchedules() }, modifier = Modifier.fillMaxWidth()) {
+                                Text("Open schedules")
+                            }
                         }
                     }
 
                     Card(Modifier.fillMaxWidth()) {
-                        Column(
-                            Modifier.padding(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
+                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text("Status", style = MaterialTheme.typography.titleLarge)
                             Text(status)
                             Text("Last result", style = MaterialTheme.typography.titleMedium)
                             Text(lastResult.ifBlank { "No task executed yet." })
                             Text(
-                                "Examples: “Open Spotify at 8 PM” • “Call +919876543210 at 6 PM” • “Open YouTube”",
+                                "Try: “Open YouTube” • “Open Spotify” • “Open Google Maps” • “Call +919876543210” • “Open YouTube at 8 PM”",
                                 style = MaterialTheme.typography.bodySmall
                             )
                             Text(
