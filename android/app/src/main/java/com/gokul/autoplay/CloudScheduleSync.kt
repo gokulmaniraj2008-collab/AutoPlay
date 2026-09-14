@@ -24,7 +24,7 @@ object CloudScheduleSync {
     fun sync(context: Context, callback: (Result<Int>) -> Unit) {
         Thread {
             try {
-                val c = connection("schedules?select=id,name,time,playlist_url,enabled,timezone&order=time.asc", "GET")
+                val c = connection("schedules?select=id,name,scheduled_date,time,playlist_url,enabled,timezone&order=scheduled_date.asc.nullslast,time.asc", "GET")
                 val code = c.responseCode
                 if (code !in 200..299) throw IllegalStateException("Supabase returned HTTP $code")
                 val array = JSONArray(c.inputStream.bufferedReader().use { it.readText() })
@@ -35,6 +35,7 @@ object CloudScheduleSync {
                             id = item.getString("id"),
                             name = item.optString("name", "AutoPlay"),
                             enabled = item.optBoolean("enabled", true),
+                            scheduledDate = item.optString("scheduled_date", "").ifBlank { null },
                             time = item.optString("time", "15:00"),
                             playlistUrl = item.optString("playlist_url", ""),
                             timezone = item.optString("timezone", "Asia/Kolkata")
@@ -47,13 +48,14 @@ object CloudScheduleSync {
         }.start()
     }
 
-    fun create(context: Context, name: String, time: String, enabled: Boolean, timezone: String, callback: (Result<String>) -> Unit) {
+    fun create(context: Context, name: String, scheduledDate: String?, time: String, enabled: Boolean, timezone: String, callback: (Result<String>) -> Unit) {
         Thread {
             try {
                 val id = java.util.UUID.randomUUID().toString()
                 val body = JSONObject().apply {
                     put("id", id)
                     put("name", name)
+                    put("scheduled_date", scheduledDate ?: JSONObject.NULL)
                     put("time", time)
                     put("playlist_url", "")
                     put("enabled", enabled)
@@ -67,11 +69,12 @@ object CloudScheduleSync {
         }.start()
     }
 
-    fun update(context: Context, scheduleId: String, name: String, time: String, enabled: Boolean, timezone: String, callback: (Result<Unit>) -> Unit) {
+    fun update(context: Context, scheduleId: String, name: String, scheduledDate: String?, time: String, enabled: Boolean, timezone: String, callback: (Result<Unit>) -> Unit) {
         Thread {
             try {
                 val body = JSONObject().apply {
                     put("name", name)
+                    put("scheduled_date", scheduledDate ?: JSONObject.NULL)
                     put("time", time)
                     put("enabled", enabled)
                     put("timezone", timezone)
