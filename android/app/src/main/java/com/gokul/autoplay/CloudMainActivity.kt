@@ -6,31 +6,42 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.provider.Settings
 import android.provider.OpenableColumns
+import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Divider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
 class CloudMainActivity : ComponentActivity() {
-    private var status by mutableStateOf("Cloud schedules not synced")
+    private var status by mutableStateOf("Ready")
     private var scheduleCount by mutableStateOf(0)
     private var exactAlarmReady by mutableStateOf(false)
     private var schedules by mutableStateOf<List<CloudScheduleStore.Schedule>>(emptyList())
@@ -53,7 +64,7 @@ class CloudMainActivity : ComponentActivity() {
         LocalTrackStore.put(this, scheduleId, uri, name)
         schedules = CloudScheduleStore.loadAll(this)
         schedules.firstOrNull { it.id == scheduleId }?.let { ExactCloudAlarmScheduler.schedule(this, it) }
-        status = "Music selected: $name"
+        status = "Music ready: $name"
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -92,10 +103,10 @@ class CloudMainActivity : ComponentActivity() {
 
     private fun setScheduleEnabled(schedule: CloudScheduleStore.Schedule, enabled: Boolean) {
         if (enabled && LocalTrackStore.get(this, schedule.id) == null) {
-            status = "Choose local music before enabling this schedule."
+            status = "Choose music first for ${schedule.name}."
             return
         }
-        status = if (enabled) "Enabling ${schedule.name}…" else "Disabling ${schedule.name}…"
+        status = if (enabled) "Turning on ${schedule.name}…" else "Turning off ${schedule.name}…"
         CloudScheduleSync.setEnabled(this, schedule.id, enabled) { result ->
             runOnUiThread {
                 result.onSuccess {
@@ -107,23 +118,23 @@ class CloudMainActivity : ComponentActivity() {
                             ExactCloudAlarmScheduler.cancel(this, updated.id)
                         }
                     }
-                    status = if (enabled) "${schedule.name} enabled and scheduled." else "${schedule.name} disabled and alarm cancelled."
+                    status = if (enabled) "${schedule.name} is ON. It will play at the scheduled time." else "${schedule.name} is OFF."
                 }.onFailure { error ->
-                    status = "Could not change schedule: ${error.message ?: "unknown error"}"
+                    status = "Could not change ${schedule.name}: ${error.message ?: "unknown error"}"
                 }
             }
         }
     }
 
     private fun syncCloud() {
-        status = "Syncing from Supabase…"
+        status = "Syncing schedules…"
         CloudScheduleSync.sync(this) { result ->
             runOnUiThread {
                 result.onSuccess { count ->
                     schedules = CloudScheduleStore.loadAll(this)
                     scheduleCount = count
                     ExactCloudAlarmScheduler.sync(this)
-                    status = "Synced $count schedule(s). Choose music for each schedule."
+                    status = if (count == 0) "No schedules found." else "Schedules updated."
                 }.onFailure { error ->
                     schedules = CloudScheduleStore.loadAll(this)
                     scheduleCount = schedules.size
@@ -138,50 +149,103 @@ class CloudMainActivity : ComponentActivity() {
         MaterialTheme {
             Surface(modifier = Modifier.fillMaxSize()) {
                 LazyColumn(
-                    modifier = Modifier.fillMaxSize().padding(20.dp),
+                    modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 12.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     item {
-                        Text("AutoPlay", style = MaterialTheme.typography.headlineLarge)
-                        Text("₹0 scheduled music player — plays audio stored on this phone.")
-                        Text("Schedules: $scheduleCount")
-                        Text(if (exactAlarmReady) "✓ Precise alarms enabled" else "⚠ Allow precise alarms for exact times")
-                        Text(status, style = MaterialTheme.typography.bodyMedium)
-                        if (!exactAlarmReady) {
-                            Button(onClick = { requestExactAlarmPermission() }, modifier = Modifier.fillMaxWidth()) {
-                                Text("Allow precise schedule alarms")
-                            }
-                        }
-                        Button(onClick = { syncCloud() }, modifier = Modifier.fillMaxWidth()) {
-                            Text("Sync from Supabase")
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text("AutoPlay", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
+                            Text("Your phone plays your music automatically at the times you choose.", style = MaterialTheme.typography.bodyLarge)
                         }
                     }
-                    items(schedules, key = { it.id }) { schedule ->
-                        val track = LocalTrackStore.get(this@CloudMainActivity, schedule.id)
-                        Card(modifier = Modifier.fillMaxWidth()) {
-                            Column(
-                                modifier = Modifier.padding(16.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Text(schedule.name, style = MaterialTheme.typography.titleLarge)
-                                Text("Time: ${schedule.time.take(5)}")
-                                Text(if (schedule.enabled) "Enabled" else "Disabled")
-                                Text(track?.name ?: "No local music selected")
-                                Button(
-                                    onClick = { chooseMusic(schedule.id) },
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Text(if (track == null) "Choose music" else "Change music")
-                                }
-                                Button(
-                                    onClick = { setScheduleEnabled(schedule, !schedule.enabled) },
-                                    enabled = schedule.enabled || track != null,
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Text(if (schedule.enabled) "Disable schedule" else "Enable schedule")
+
+                    item {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(18.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text("SETUP", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                                Text(if (exactAlarmReady) "✓ Exact-time alarms are ready" else "1. Allow exact-time alarms")
+                                Text("2. Choose a song for each schedule")
+                                Text("3. Turn the schedule ON")
+                                if (!exactAlarmReady) {
+                                    Button(onClick = { requestExactAlarmPermission() }, modifier = Modifier.fillMaxWidth()) {
+                                        Text("Allow exact-time alarms")
+                                    }
                                 }
                             }
                         }
+                    }
+
+                    item {
+                        Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
+                            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text("Schedules", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                                        Text("$scheduleCount schedule(s) • ${schedules.count { it.enabled }} ON")
+                                    }
+                                    OutlinedButton(onClick = { syncCloud() }) { Text("Sync") }
+                                }
+                                Divider()
+                                Text(status, style = MaterialTheme.typography.bodyMedium)
+                            }
+                        }
+                    }
+
+                    if (schedules.isEmpty()) {
+                        item {
+                            Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
+                                Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Text("No schedules yet", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                                    Text("Create a schedule on the website, then tap Sync here.")
+                                }
+                            }
+                        }
+                    }
+
+                    items(schedules, key = { it.id }) { schedule ->
+                        val track = LocalTrackStore.get(this@CloudMainActivity, schedule.id)
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(18.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (schedule.enabled) MaterialTheme.colorScheme.secondaryContainer
+                                else MaterialTheme.colorScheme.surfaceVariant
+                            )
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(schedule.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Text(schedule.time.take(5), style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold)
+                                        Text(if (schedule.enabled) "ON • will play automatically" else "OFF • not scheduled")
+                                    }
+                                    Switch(
+                                        checked = schedule.enabled,
+                                        onCheckedChange = { setScheduleEnabled(schedule, it) },
+                                        enabled = schedule.enabled || track != null
+                                    )
+                                }
+                                Divider()
+                                Text("Music", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                                Text(track?.name ?: "No music selected yet")
+                                Button(onClick = { chooseMusic(schedule.id) }, modifier = Modifier.fillMaxWidth()) {
+                                    Text(if (track == null) "Choose music" else "Change music")
+                                }
+                                if (track == null) {
+                                    Text("Choose a song first, then turn ON the switch.", style = MaterialTheme.typography.bodySmall)
+                                }
+                            }
+                        }
+                    }
+
+                    item {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("₹0 local playback • Music stays on your phone • No Spotify required", style = MaterialTheme.typography.bodySmall)
                     }
                 }
             }
