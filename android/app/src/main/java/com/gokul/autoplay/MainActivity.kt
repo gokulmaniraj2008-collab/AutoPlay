@@ -1,7 +1,10 @@
 package com.gokul.autoplay
 
 import android.Manifest
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
@@ -31,19 +34,57 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 
 class MainActivity : ComponentActivity() {
+    private var tommyStatus = TommyStatusEvents.OFF
+    private var tommyStatusText = "Tommy is OFF"
+
+    private val tommyStatusReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action != TommyStatusEvents.ACTION) return
+            tommyStatus = intent.getStringExtra(TommyStatusEvents.EXTRA_STATUS) ?: TommyStatusEvents.OFF
+            tommyStatusText = intent.getStringExtra(TommyStatusEvents.EXTRA_TEXT)
+                ?: defaultTommyStatusText(tommyStatus)
+            renderApp()
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent { AutoPlayApp(::activateFloatingTommy, ::deactivateFloatingTommy) }
+        renderApp()
+    }
+
+    override fun onStart() {
+        super.onStart()
+        ContextCompat.registerReceiver(
+            this,
+            tommyStatusReceiver,
+            IntentFilter(TommyStatusEvents.ACTION),
+            ContextCompat.RECEIVER_NOT_EXPORTED
+        )
+        renderApp()
+    }
+
+    override fun onStop() {
+        unregisterReceiver(tommyStatusReceiver)
+        super.onStop()
+    }
+
+    private fun renderApp() {
+        setContent {
+            AutoPlayApp(
+                tommyStatus = tommyStatus,
+                tommyStatusText = tommyStatusText,
+                onStart = ::activateFloatingTommy,
+                onStop = ::deactivateFloatingTommy
+            )
+        }
     }
 
     private fun activateFloatingTommy() {
@@ -56,44 +97,92 @@ class MainActivity : ComponentActivity() {
             return
         }
         ContextCompat.startForegroundService(this, Intent(this, FloatingTommyService::class.java))
-        Toast.makeText(this, "Tommy is ready", Toast.LENGTH_SHORT).show()
     }
 
     private fun deactivateFloatingTommy() {
         stopService(Intent(this, FloatingTommyService::class.java))
+        tommyStatus = TommyStatusEvents.OFF
+        tommyStatusText = "Tommy is OFF"
+        renderApp()
         Toast.makeText(this, "Tommy is off", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun defaultTommyStatusText(status: String): String = when (status) {
+        TommyStatusEvents.ON -> "Tommy is ON"
+        TommyStatusEvents.LISTENING -> "Tommy is listening…"
+        TommyStatusEvents.HEARD -> "Tommy heard you"
+        TommyStatusEvents.WORKING -> "Tommy is working…"
+        else -> "Tommy is OFF"
     }
 }
 
 @Composable
-private fun AutoPlayApp(onStart: () -> Unit, onStop: () -> Unit) {
+private fun AutoPlayApp(
+    tommyStatus: String,
+    tommyStatusText: String,
+    onStart: () -> Unit,
+    onStop: () -> Unit
+) {
     var page by remember { mutableIntStateOf(0) }
-    var tommyEnabled by remember { mutableStateOf(false) }
-    val start = { tommyEnabled = true; onStart() }
-    val stop = { tommyEnabled = false; onStop() }
+    val tommyEnabled = tommyStatus != TommyStatusEvents.OFF
 
     MaterialTheme {
         Surface(Modifier.fillMaxSize()) {
             Scaffold(bottomBar = {
-                NavigationBar {
-                    NavigationBarItem(page == 0, { page = 0 }, icon = { Text("⌂") }, label = { Text("Home") })
-                    NavigationBarItem(page == 1, { page = 1 }, icon = { Text("⚡") }, label = { Text("Pages") })
-                    NavigationBarItem(page == 5, { page = 5 }, icon = { Text("T") }, label = { Text("Tommy") })
+                Column {
+                    TommyBottomStatus(tommyStatus, tommyStatusText)
+                    NavigationBar {
+                        NavigationBarItem(page == 0, { page = 0 }, icon = { Text("⌂") }, label = { Text("Home") })
+                        NavigationBarItem(page == 1, { page = 1 }, icon = { Text("⚡") }, label = { Text("Pages") })
+                        NavigationBarItem(page == 5, { page = 5 }, icon = { Text("T") }, label = { Text("Tommy") })
+                    }
                 }
             }) { padding ->
                 Box(Modifier.fillMaxSize().padding(padding)) {
                     when (page) {
-                        0 -> HomePage({ page = 1 }, start)
+                        0 -> HomePage({ page = 1 }, onStart)
                         1 -> PageIndex { page = it }
                         2 -> QuickCommandsPage()
                         3 -> AutomationPage()
-                        4 -> BackgroundSearchPage(tommyEnabled, { if (it) start() else stop() })
-                        5 -> VoiceAssistantPage(tommyEnabled, { if (it) start() else stop() })
+                        4 -> BackgroundSearchPage(tommyEnabled, { if (it) onStart() else onStop() })
+                        5 -> VoiceAssistantPage(tommyEnabled, { if (it) onStart() else onStop() })
                         6 -> FloatingAssistantPage()
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun TommyBottomStatus(status: String, text: String) {
+    val indicator = when (status) {
+        TommyStatusEvents.OFF -> "○"
+        TommyStatusEvents.LISTENING -> "◉"
+        TommyStatusEvents.HEARD -> "✓"
+        TommyStatusEvents.WORKING -> "◉"
+        else -> "●"
+    }
+    val label = when (status) {
+        TommyStatusEvents.OFF -> "Tommy is OFF"
+        TommyStatusEvents.ON -> "Tommy is ON"
+        TommyStatusEvents.LISTENING -> "Tommy is listening…"
+        TommyStatusEvents.HEARD -> text
+        TommyStatusEvents.WORKING -> "Tommy is working…"
+        else -> text
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+    ) {
+        Text(
+            text = "$indicator  $label",
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold
+        )
     }
 }
 
