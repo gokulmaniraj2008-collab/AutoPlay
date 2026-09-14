@@ -1,28 +1,53 @@
 # AutoPlay
 
-> Schedule your music. Let your Android phone handle the reminder and Spotify launch.
+> Turn natural-language tasks into scheduled Android actions.
+
+## 🤖 AI Phone Task Automation
+
+AutoPlay is evolving from a music scheduler into a permission-based Android task automation app.
+
+You can type a task such as:
+
+- `At 8 PM play a Tamil song on Spotify`
+- `Open Spotify at 8 PM`
+- `Call +919876543210 at 6 PM`
+- `Open YouTube now`
+
+AutoPlay normalizes the request into an action, stores it locally, and can schedule it with Android exact alarms when the required permission is enabled.
+
+### Task flow
+
+```text
+Natural-language task
+        ↓
+   AutoPlay parser
+        ↓
+  Normalized task
+        ↓
+ Exact Android alarm (if scheduled)
+        ↓
+    Task receiver
+        ↓
+ Permission-aware Android action
+        ↓
+ Result / task history
+```
+
+This follows the same general Android integration model used by assistant-style apps: apps request supported actions through Android APIs and explicit user permissions rather than receiving unrestricted access to the phone.
+
+## 🎵 Spotify
+
+AutoPlay can open the installed Spotify app for Spotify tasks today. Full unattended Spotify playback is a separate integration step because Spotify requires its own authorization and App Remote integration. Spotify's official Android SDK supports remotely controlling playback in the Spotify app after user authorization, including initiating track/playlist playback.
+
+Do not treat a simple Spotify URL launch as guaranteed unattended playback.
 
 ## 🌐 Web App
 
-**Live app:** https://auto-play-4qyk.vercel.app/
-
-Use the web dashboard to manage AutoPlay schedules and Spotify playlist links.
-
-## 📱 Android App
-
-**Download the AutoPlay Android app:** [Download APK](https://github.com/gokulmaniraj2008-collab/AutoPlay/releases/latest)
-
-> The APK download becomes active when the Android APK is published in a GitHub Release.
+The existing web dashboard remains available for schedule management and Supabase synchronization.
 
 ## 🔄 Supabase Cloud Sync
 
-AutoPlay now has the backend foundation for Web ↔ Android schedule synchronization.
-
-### `autoplay_schedules`
-
-The Supabase project contains an `autoplay_schedules` table for user-owned schedule records with Row Level Security (RLS) enabled.
-
-The intended architecture is:
+The project contains an `autoplay_schedules` table for user-owned schedule records with Row Level Security (RLS).
 
 ```text
 Website Login
@@ -34,116 +59,48 @@ autoplay_schedules
 Android App Login
 ```
 
-This allows the same authenticated user account to share schedules between the web dashboard and Android app.
+Web ↔ Android synchronization should still be verified end-to-end before being described as production-complete.
 
-### Security model
+## 📱 Android
 
-- User-owned schedule records
-- `auth.users` ownership
-- RLS policies for read / insert / update / delete
-- Browser/mobile clients use the public Supabase client configuration
-- Server/service-role secrets must never be committed to GitHub
+Current Android stack:
 
-**Important:** The Supabase database foundation is in place, but the Web and Android source-code integration with Supabase Auth and `autoplay_schedules` is still pending verification. Do not treat Web ↔ Android synchronization as complete until both clients are connected and tested with the same account.
-
-## 📱 Project
-
-AutoPlay is a web + Android automation project designed to let users create recurring music schedules, synchronize them through Supabase, and launch Spotify playlist links at the scheduled time.
-
-### Current architecture
-
-```text
-Next.js Web App
-      ↓
-Supabase Auth + PostgreSQL
-      ↓
-autoplay_schedules
-      ↓
-Android AutoPlay App
-      ↓
-Android Alarm / Notification
-      ↓
-Spotify Playlist
-```
-
-## ✨ Features
-
-- Schedule a daily music time
-- Save a Spotify playlist URL
-- Enable or disable schedules
-- Test a schedule immediately
-- Android alarm scheduling
-- Android notification support
-- Local Android schedule persistence
-- Next.js web dashboard
-- Supabase authentication and schedule-sync foundation
-- RLS-protected user-owned schedules
-- GitHub Actions Android APK build
-- Vercel deployment for the web app
-
-## 🛠️ Tech Stack
-
-### Web
-- Next.js 16
-- React
-- TypeScript
-- Supabase
-- Vercel
-
-### Backend
-- Supabase Auth
-- PostgreSQL
-- Row Level Security (RLS)
-- `autoplay_schedules`
-
-### Android
 - Kotlin
 - Jetpack Compose
 - Android AlarmManager
-- Android Notifications
-- Gradle
+- Exact alarms
+- Android permissions
+- Task parser + task store
+- Permission-aware task executor
+- Existing local/cloud music scheduler
+- GitHub Actions APK build
 
-## 🚧 Current Status
+### Current Android version
 
-AutoPlay is under active development.
+**0.6.0** — AI Phone Task Automation foundation.
 
-**Completed:**
-- Supabase project connection/foundation
-- `autoplay_schedules` database table
-- User ownership model
-- RLS policies for schedule CRUD access
-- GitHub repository documentation updated for the sync architecture
+## 🔐 Security model
 
-**In progress:**
-- Connect Web authentication to Supabase Auth
-- Connect Android authentication to the same Supabase account
-- Replace/bridge local schedule storage with `autoplay_schedules`
-- Verify Web → Supabase → Android synchronization
-- Verify Android → Supabase → Web synchronization
+AutoPlay does **not** receive unrestricted or hidden control of the device.
 
-The Android scheduler can launch a Spotify playlist URL at the scheduled time. Actual automatic playback behavior depends on Spotify and Android device restrictions, so this should not be treated as guaranteed unattended playback yet.
+Actions use explicit Android capabilities such as:
 
-## 🚀 Development
+- Exact alarms for scheduled tasks
+- `CALL_PHONE` for direct calls
+- Android intents for supported app launches
+- Spotify authorization for Spotify App Remote control
 
-### Web
+Sensitive credentials and API keys must never be committed to GitHub.
 
-```bash
-cd web
-npm install
-npm run dev
-```
+## 🚧 Current limitations
 
-Create a `web/.env.local` file with the Supabase public project URL and publishable/anonymous client key before using cloud-backed schedule features.
+The new task engine is the foundation, not a claim of universal phone control.
 
-### Android
-
-Open the `android` directory in Android Studio and build the debug APK.
-
-## 🔐 Security
-
-Do not commit Supabase service-role keys, private API keys, signing keys, passwords, or other secrets to GitHub.
-
-Only public client configuration intended for browser/mobile use should be exposed through environment variables.
+- Natural-language parsing is intentionally simple in v0.6.0.
+- Scheduled calls currently require a phone number rather than resolving contact names.
+- Android background activity restrictions can prevent an app from freely launching arbitrary screens while the phone is unattended.
+- Spotify unattended playback requires the official Spotify App Remote authorization/integration; the current task runner opens Spotify but does not bypass Spotify or Android security.
+- More actions can be added through dedicated Android APIs/integrations.
 
 ## 📦 Repository
 
