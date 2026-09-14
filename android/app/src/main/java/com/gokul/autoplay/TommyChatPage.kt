@@ -61,7 +61,6 @@ fun TommyChatPage() {
 
     DisposableEffect(context) {
         var liveTommyMessageIndex = -1
-
         fun addTommyMessage(text: String) {
             if (text.isBlank()) return
             if (messages.lastOrNull()?.fromTommy == true && messages.lastOrNull()?.text == text) return
@@ -136,7 +135,11 @@ fun TommyChatPage() {
                 isListening = false
                 input = text
                 voiceStatus = "Command received"
-                sendCommand(context, messages, text)
+                // When the floating service is active it is the single command executor.
+                // This prevents the Chat page and service from executing the same command twice.
+                if (!FloatingTommyService.isRunning) {
+                    sendCommand(context, messages, text)
+                }
                 input = ""
             }
         }
@@ -148,7 +151,6 @@ fun TommyChatPage() {
             @Suppress("DEPRECATION")
             context.registerReceiver(statusReceiver, filter)
         }
-
         TommyVoiceController.addListener(voiceListener)
 
         onDispose {
@@ -211,9 +213,12 @@ fun TommyChatPage() {
                 modifier = Modifier.height(56.dp)
             ) { Text(if (isListening) "■" else "🎤") }
             Spacer(Modifier.width(6.dp))
-            Button(onClick = { sendMessage() }, enabled = input.trim().isNotEmpty(), shape = RoundedCornerShape(18.dp), modifier = Modifier.height(56.dp)) {
-                Text("Send")
-            }
+            Button(
+                onClick = { sendMessage() },
+                enabled = input.trim().isNotEmpty(),
+                shape = RoundedCornerShape(18.dp),
+                modifier = Modifier.height(56.dp)
+            ) { Text("Send") }
         }
     }
 }
@@ -225,10 +230,15 @@ private fun sendCommand(context: Context, messages: MutableList<TommyMessage>, c
 
 @Composable
 private fun ChatBubble(message: TommyMessage) {
-    Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = if (message.fromTommy) Alignment.Start else Alignment.End) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = if (message.fromTommy) Alignment.Start else Alignment.End
+    ) {
         Card(
             shape = RoundedCornerShape(18.dp),
-            colors = CardDefaults.cardColors(containerColor = if (message.fromTommy) Color(0xFFEFF5FF) else MaterialTheme.colorScheme.primaryContainer)
+            colors = CardDefaults.cardColors(
+                containerColor = if (message.fromTommy) Color(0xFFEFF5FF) else MaterialTheme.colorScheme.primaryContainer
+            )
         ) { Text(message.text, modifier = Modifier.padding(horizontal = 14.dp, vertical = 11.dp)) }
     }
 }
@@ -236,13 +246,26 @@ private fun ChatBubble(message: TommyMessage) {
 private fun executeTommyChatCommand(context: Context, rawCommand: String): String {
     val command = rawCommand.lowercase().replace(Regex("[^a-z0-9 ]"), " ").replace(Regex("\\s+"), " ").trim()
     return when {
-        command.contains("instagram") && (command.contains("open") || command.contains("start") || command.contains("launch")) -> { launchApp(context, "com.instagram.android", "https://www.instagram.com"); "OK, opening Instagram full screen. Say 'go reels page' next." }
+        command.contains("instagram") && (command.contains("open") || command.contains("start") || command.contains("launch")) -> {
+            launchApp(context, "com.instagram.android", "https://www.instagram.com")
+            "OK, opening Instagram full screen. Say 'go reels page' next."
+        }
         command.contains("instagram") -> { launchApp(context, "com.instagram.android", "https://www.instagram.com"); "OK, Instagram opened." }
-        (command.contains("reel") || command.contains("reels")) && (command.contains("go") || command.contains("open") || command.contains("show") || command.contains("page")) -> { if (tapAccessibilityCommand("OPEN_INSTAGRAM_REELS")) "OK, opening Instagram Reels." else accessibilityRequired() }
-        (command.contains("scroll") || command.contains("swipe") || command.contains("next")) && (command.contains("reel") || command.contains("instagram") || command.contains("down")) -> { if (tapAccessibilityCommand("SCROLL_REEL")) "OK, scrolling to the next reel." else accessibilityRequired() }
-        command.contains("like") && (command.contains("reel") || command.contains("instagram") || command.contains("this")) -> { if (tapAccessibilityCommand("LIKE_REEL")) "OK, liked this Reel." else accessibilityRequired() }
-        command.contains("follow") && (command.contains("account") || command.contains("user") || command.contains("this") || command.contains("instagram")) -> { if (tapAccessibilityCommand("FOLLOW_ACCOUNT")) "OK, following this account." else accessibilityRequired() }
-        (command.contains("comment") || command.contains("comments")) && (command.contains("open") || command.contains("show") || command.contains("view") || command.contains("go") || command.contains("this")) -> { if (tapAccessibilityCommand("OPEN_COMMENTS")) "OK, opening comments." else accessibilityRequired() }
+        (command.contains("reel") || command.contains("reels")) && (command.contains("go") || command.contains("open") || command.contains("show") || command.contains("page")) -> {
+            if (tapAccessibilityCommand("OPEN_INSTAGRAM_REELS")) "OK, opening Instagram Reels." else accessibilityRequired()
+        }
+        (command.contains("scroll") || command.contains("swipe") || command.contains("next")) && (command.contains("reel") || command.contains("instagram") || command.contains("down")) -> {
+            if (tapAccessibilityCommand("SCROLL_REEL")) "OK, scrolling to the next reel." else accessibilityRequired()
+        }
+        command.contains("like") && (command.contains("reel") || command.contains("instagram") || command.contains("this")) -> {
+            if (tapAccessibilityCommand("LIKE_REEL")) "OK, liked this Reel." else accessibilityRequired()
+        }
+        command.contains("follow") && (command.contains("account") || command.contains("user") || command.contains("this") || command.contains("instagram")) -> {
+            if (tapAccessibilityCommand("FOLLOW_ACCOUNT")) "OK, following this account." else accessibilityRequired()
+        }
+        (command.contains("comment") || command.contains("comments")) && (command.contains("open") || command.contains("show") || command.contains("view") || command.contains("go") || command.contains("this")) -> {
+            if (tapAccessibilityCommand("OPEN_COMMENTS")) "OK, opening comments." else accessibilityRequired()
+        }
         command.contains("youtube") -> { launchApp(context, "com.google.android.youtube", "https://www.youtube.com"); "OK, opening YouTube." }
         command.contains("google") -> { launchApp(context, "com.google.android.googlequicksearchbox", "https://www.google.com"); "OK, opening Google." }
         command.contains("whatsapp") -> { launchApp(context, "com.whatsapp", "https://www.whatsapp.com"); "OK, opening WhatsApp." }
