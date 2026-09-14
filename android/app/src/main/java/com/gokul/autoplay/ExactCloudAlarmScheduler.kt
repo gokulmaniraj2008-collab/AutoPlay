@@ -5,6 +5,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
 import java.time.ZonedDateTime
@@ -23,8 +24,16 @@ object ExactCloudAlarmScheduler {
         val zone = runCatching { ZoneId.of(schedule.timezone) }.getOrDefault(ZoneId.of("Asia/Kolkata"))
         val time = runCatching { LocalTime.parse(schedule.time.take(5)) }.getOrDefault(LocalTime.of(15, 0))
         val now = ZonedDateTime.now(zone)
-        var next = now.withHour(time.hour).withMinute(time.minute).withSecond(0).withNano(0)
-        if (!next.isAfter(now)) next = next.plusDays(1)
+        val next = if (!schedule.scheduledDate.isNullOrBlank()) {
+            val date = runCatching { LocalDate.parse(schedule.scheduledDate) }.getOrNull() ?: now.toLocalDate()
+            val candidate = ZonedDateTime.of(date, time, zone)
+            if (!candidate.isAfter(now)) return
+            candidate
+        } else {
+            var candidate = now.withHour(time.hour).withMinute(time.minute).withSecond(0).withNano(0)
+            if (!candidate.isAfter(now)) candidate = candidate.plusDays(1)
+            candidate
+        }
         val alarms = context.getSystemService(AlarmManager::class.java)
         val millis = next.toInstant().toEpochMilli()
         val pending = pendingIntent(context, schedule.id)
@@ -36,18 +45,13 @@ object ExactCloudAlarmScheduler {
     }
 
     fun cancel(context: Context, scheduleId: String) {
-        val alarms = context.getSystemService(AlarmManager::class.java)
-        alarms.cancel(pendingIntent(context, scheduleId))
+        context.getSystemService(AlarmManager::class.java).cancel(pendingIntent(context, scheduleId))
     }
 
     fun sync(context: Context) {
-        CloudScheduleStore.loadAll(context)
-            .forEach { schedule ->
-                if (schedule.enabled && LocalTrackStore.get(context, schedule.id) != null) {
-                    schedule(context, schedule)
-                } else {
-                    cancel(context, schedule.id)
-                }
-            }
+        CloudScheduleStore.loadAll(context).forEach { schedule ->
+            if (schedule.enabled && LocalTrackStore.get(context, schedule.id) != null) schedule(context, schedule)
+            else cancel(context, schedule.id)
+        }
     }
 }
