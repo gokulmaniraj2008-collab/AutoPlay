@@ -4,6 +4,7 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.CALL_PHONE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
 
@@ -11,12 +12,13 @@
         android:theme="@android:style/Theme.Material.Light.NoActionBar"
         android:label="AutoPlay"
         android:allowBackup="true">
-        <activity android:name=".CloudMainActivity" android:exported="true">
+        <activity android:name=".TaskActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <activity android:name=".CloudMainActivity" android:exported="false" />
         <activity android:name=".MainActivity" android:exported="false" />
         <service
             android:name=".LocalPlaybackService"
@@ -25,6 +27,7 @@
         <receiver android:name=".PlaybackReceiver" android:exported="false" />
         <receiver android:name=".CloudPlaybackReceiver" android:exported="false" />
         <receiver android:name=".ExactCloudPlaybackReceiver" android:exported="false" />
+        <receiver android:name=".TaskReceiver" android:exported="false" />
         <receiver
             android:name=".AutoPlayBootReceiver"
             android:exported="true">
