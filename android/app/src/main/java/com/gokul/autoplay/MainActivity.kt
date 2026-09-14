@@ -30,10 +30,12 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -45,7 +47,12 @@ import androidx.core.content.ContextCompat
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent { AutoPlayApp(onTommyClick = ::activateFloatingTommy) }
+        setContent {
+            AutoPlayApp(
+                onTommyStart = ::activateFloatingTommy,
+                onTommyStop = ::deactivateFloatingTommy
+            )
+        }
     }
 
     private fun activateFloatingTommy() {
@@ -72,15 +79,29 @@ class MainActivity : ComponentActivity() {
         Toast.makeText(this, "Tommy is ready", Toast.LENGTH_SHORT).show()
     }
 
-    private fun testAutoPlay() {
-        Toast.makeText(this, "AutoPlay test started", Toast.LENGTH_SHORT).show()
-        activateFloatingTommy()
+    private fun deactivateFloatingTommy() {
+        stopService(Intent(this, FloatingTommyService::class.java))
+        Toast.makeText(this, "Tommy is off", Toast.LENGTH_SHORT).show()
     }
 }
 
 @Composable
-private fun AutoPlayApp(onTommyClick: () -> Unit) {
+private fun AutoPlayApp(
+    onTommyStart: () -> Unit,
+    onTommyStop: () -> Unit
+) {
     var selectedTab by remember { mutableIntStateOf(0) }
+    var tommyEnabled by remember { mutableStateOf(false) }
+
+    val startTommy: () -> Unit = {
+        tommyEnabled = true
+        onTommyStart()
+    }
+
+    val stopTommy: () -> Unit = {
+        tommyEnabled = false
+        onTommyStop()
+    }
 
     MaterialTheme {
         Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
@@ -116,11 +137,16 @@ private fun AutoPlayApp(onTommyClick: () -> Unit) {
                     when (selectedTab) {
                         0 -> AutoPlayHome(
                             onAddSchedule = { selectedTab = 3 },
-                            onTestNow = onTommyClick,
-                            onTommyClick = onTommyClick
+                            onTestNow = startTommy,
+                            onTommyClick = startTommy
                         )
                         1 -> QuickCommandsPage()
-                        2 -> AutoPlaySettings()
+                        2 -> AutoPlaySettings(
+                            tommyEnabled = tommyEnabled,
+                            onTommyEnabledChange = { enabled ->
+                                if (enabled) startTommy() else stopTommy()
+                            }
+                        )
                         3 -> AutomationPage()
                     }
                 }
@@ -201,7 +227,10 @@ private fun AutoPlayHome(
 }
 
 @Composable
-private fun AutoPlaySettings() {
+private fun AutoPlaySettings(
+    tommyEnabled: Boolean,
+    onTommyEnabledChange: (Boolean) -> Unit
+) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -212,8 +241,29 @@ private fun AutoPlaySettings() {
         Text("Control Tommy permissions and app behavior.", color = MaterialTheme.colorScheme.onSurfaceVariant)
 
         Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(22.dp)) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(18.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Tommy assistant", fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        if (tommyEnabled) "Tommy is ON. Voice listening and the floating bubble are active." else "Tommy is OFF. Voice listening and the floating bubble are stopped."
+                    )
+                }
+                Switch(
+                    checked = tommyEnabled,
+                    onCheckedChange = onTommyEnabledChange
+                )
+            }
+        }
+
+        Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(22.dp)) {
             Column(modifier = Modifier.padding(18.dp)) {
-                Text("Tommy assistant", fontWeight = FontWeight.Bold)
+                Text("Permissions", fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(6.dp))
                 Text("Tommy uses microphone access for Hey Tommy voice listening and overlay access for the floating bubble.")
             }
