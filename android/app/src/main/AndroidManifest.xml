@@ -8,13 +8,13 @@
         android:theme="@android:style/Theme.Material.Light.NoActionBar"
         android:label="AutoPlay"
         android:allowBackup="true">
-        <activity android:name=".MainActivity" android:exported="true">
+        <activity android:name=".CloudMainActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-
+        <activity android:name=".MainActivity" android:exported="false" />
         <receiver android:name=".PlaybackReceiver" android:exported="false" />
         <receiver android:name=".CloudPlaybackReceiver" android:exported="false" />
         <receiver
