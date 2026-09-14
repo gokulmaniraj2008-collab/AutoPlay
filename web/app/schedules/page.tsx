@@ -24,6 +24,10 @@ function formatDate(value?: string | null) {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
+function formatScheduleDateTime(date?: string | null, time?: string) {
+  return `${formatDate(date)} · ${formatTime(time || '')}`;
+}
+
 export default function SchedulesPage() {
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [form, setForm] = useState(EMPTY);
@@ -49,7 +53,7 @@ export default function SchedulesPage() {
       name: form.name.trim(), scheduled_date: form.scheduled_date || null, time: form.time, playlist_url: '', enabled: form.enabled,
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     });
-    if (error) setMessage(error.message); else { setForm({ ...EMPTY, scheduled_date: today() }); setMessage('Schedule created. Select music on the Android app.'); await load(); }
+    if (error) setMessage(error.message); else { setForm({ ...EMPTY, scheduled_date: today() }); setMessage(`Schedule created for ${formatScheduleDateTime(form.scheduled_date, form.time)}. Select music on the Android app.`); await load(); }
     setSaving(false);
   }
 
@@ -61,7 +65,7 @@ export default function SchedulesPage() {
       name: editing.name.trim(), scheduled_date: editing.scheduled_date || null, time: editing.time.slice(0, 5), enabled: editing.enabled,
       updated_at: new Date().toISOString(),
     }).eq('id', editing.id);
-    if (error) setMessage(error.message); else { setEditing(null); setMessage('Schedule updated.'); await load(); }
+    if (error) setMessage(error.message); else { setEditing(null); setMessage(`Schedule updated to ${formatScheduleDateTime(editing.scheduled_date, editing.time)}.`); await load(); }
     setSaving(false);
   }
 
@@ -99,7 +103,7 @@ export default function SchedulesPage() {
           <div className="section-title"><div><h2>Your schedules</h2><p>Shared through Supabase with Android</p></div><span className="pill">{schedules.length}</span></div>
           {loading ? <p>Loading…</p> : schedules.length === 0 ? <div className="empty">No schedules yet. Create your first one.</div> : <div className="schedule-list">{schedules.map(item => (
             <article className="schedule" key={item.id}>
-              <div><strong>{formatDate(item.scheduled_date)}</strong><h3>{formatTime(item.time)}</h3><span>{item.name}</span><br /><span className="status">{item.enabled ? '● Enabled' : '○ Disabled'}</span></div>
+              <div><strong>📅 {formatDate(item.scheduled_date)}</strong><h3>⏰ {formatTime(item.time)}</h3><span>{item.name}</span><br /><span className="status">{item.enabled ? '● Enabled' : '○ Disabled'}</span></div>
               <div className="actions"><button className="secondary" onClick={() => toggle(item.id, item.enabled)}>{item.enabled ? 'Disable' : 'Enable'}</button><button className="secondary" onClick={() => setEditing({ ...item })}>Edit</button><button className="danger" onClick={() => remove(item.id)}>Delete</button></div>
             </article>
           ))}</div>}
