@@ -208,7 +208,8 @@ class CloudMainActivity : ComponentActivity() {
         val hour = parts.getOrNull(0)?.toIntOrNull() ?: return value.take(5)
         val minute = parts.getOrNull(1)?.toIntOrNull() ?: 0
         val suffix = if (hour >= 12) "PM" else "AM"
-        return "%d:%02d %s".format(hour % 12, minute, suffix).replace("0:", "12:")
+        val displayHour = when (hour % 12) { 0 -> 12; else -> hour % 12 }
+        return "%d:%02d %s".format(displayHour, minute, suffix)
     }
 
     @Composable
@@ -219,7 +220,7 @@ class CloudMainActivity : ComponentActivity() {
         if (showSplash) {
             SplashScreen()
             LaunchedEffect(Unit) {
-                delay(1200)
+                delay(900)
                 showSplash = false
             }
         } else if (showOnboarding) {
@@ -235,11 +236,7 @@ class CloudMainActivity : ComponentActivity() {
     @Composable
     private fun BrandMark(size: Int = 88) {
         Box(Modifier.size(size.dp), contentAlignment = Alignment.Center) {
-            Surface(
-                Modifier.fillMaxSize(),
-                CircleShape,
-                color = MaterialTheme.colorScheme.primaryContainer
-            ) {}
+            Surface(Modifier.fillMaxSize(), CircleShape, color = MaterialTheme.colorScheme.primaryContainer) {}
             Text("♫", style = MaterialTheme.typography.displayMedium, fontWeight = FontWeight.Bold)
         }
     }
@@ -252,10 +249,10 @@ class CloudMainActivity : ComponentActivity() {
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
-                BrandMark(104)
-                Spacer(Modifier.height(22.dp))
+                BrandMark(96)
+                Spacer(Modifier.height(18.dp))
                 Text("AutoPlay", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(6.dp))
+                Spacer(Modifier.height(4.dp))
                 Text("Your music. Your time.")
             }
         }
@@ -265,27 +262,30 @@ class CloudMainActivity : ComponentActivity() {
     private fun GetStartedScreen(onStarted: () -> Unit) {
         Surface(Modifier.fillMaxSize()) {
             Column(
-                Modifier.fillMaxSize().padding(28.dp),
+                Modifier.fillMaxSize().padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
-                BrandMark(112)
-                Spacer(Modifier.height(28.dp))
+                BrandMark(104)
+                Spacer(Modifier.height(22.dp))
                 Text("Welcome to AutoPlay", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(10.dp))
-                Text("Create schedules on your phone or website, then let AutoPlay play your local music automatically.")
-                Spacer(Modifier.height(24.dp))
-                Card(Modifier.fillMaxWidth(), RoundedCornerShape(20.dp)) {
-                    Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "Create schedules on your phone or website, then let AutoPlay play your local music automatically.",
+                    textAlign = TextAlign.Center
+                )
+                Spacer(Modifier.height(20.dp))
+                Card(Modifier.fillMaxWidth(), RoundedCornerShape(18.dp)) {
+                    Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
                         Text("Simple & ₹0", fontWeight = FontWeight.Bold)
-                        Text("• Shared CRUD between website and app")
+                        Text("• Shared schedules between website and app")
                         Text("• Choose a date + exact time")
-                        Text("• Music stored on your Android phone")
+                        Text("• Music stays on your Android phone")
                         Text("• No Spotify subscription required")
                     }
                 }
-                Spacer(Modifier.height(28.dp))
-                Button(onStarted, Modifier.fillMaxWidth().height(54.dp)) {
+                Spacer(Modifier.height(22.dp))
+                Button(onStarted, Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(26.dp)) {
                     Text("Get Started", fontWeight = FontWeight.Bold)
                 }
             }
@@ -298,57 +298,43 @@ class CloudMainActivity : ComponentActivity() {
         var editing by remember { mutableStateOf<CloudScheduleStore.Schedule?>(null) }
 
         MaterialTheme {
-            Surface(Modifier.fillMaxSize()) {
+            Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                 LazyColumn(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = 20.dp, vertical = 10.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                    modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     item {
                         Row(
-                            modifier = Modifier.fillMaxWidth(),
+                            Modifier.fillMaxWidth().padding(horizontal = 2.dp, vertical = 4.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            BrandMark(52)
+                            BrandMark(46)
                             Spacer(Modifier.size(12.dp))
-                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
                                 Text("AutoPlay", fontSize = 22.sp, fontWeight = FontWeight.Bold)
-                                Text("Your music. Your time.", fontSize = 13.sp)
+                                Text("Your music. Your time.", fontSize = 12.sp)
                             }
+                            Text("♫", fontSize = 24.sp, fontWeight = FontWeight.Bold)
                         }
                     }
 
                     item {
                         Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(20.dp),
+                            Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(18.dp),
                             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
                         ) {
-                            Column(
-                                modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 17.dp),
-                                verticalArrangement = Arrangement.spacedBy(9.dp)
-                            ) {
-                                Text("QUICK SETUP", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                Text(
-                                    if (exactAlarmReady) "✓ Exact-time alarms are ready" else "1. Allow exact-time alarms",
-                                    fontSize = 14.sp
-                                )
-                                Text("2. Create or sync a schedule", fontSize = 14.sp)
-                                Text("3. Choose local music and turn it ON", fontSize = 14.sp)
+                            Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text("QUICK SETUP", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                SetupRow("1", if (exactAlarmReady) "Exact-time alarms are ready" else "Allow exact-time alarms")
+                                SetupRow("2", "Create or sync a schedule")
+                                SetupRow("3", "Choose local music and turn it ON")
                                 if (!exactAlarmReady) {
                                     Button(
                                         onClick = { requestExactAlarmPermission() },
-                                        modifier = Modifier.fillMaxWidth().height(48.dp),
-                                        shape = RoundedCornerShape(24.dp)
-                                    ) {
-                                        Text(
-                                            "Allow exact-time alarms",
-                                            fontSize = 13.sp,
-                                            fontWeight = FontWeight.SemiBold,
-                                            textAlign = TextAlign.Center
-                                        )
-                                    }
+                                        Modifier.fillMaxWidth().height(46.dp),
+                                        shape = RoundedCornerShape(23.dp)
+                                    ) { Text("Allow exact-time alarms", fontWeight = FontWeight.SemiBold) }
                                 }
                             }
                         }
@@ -356,161 +342,57 @@ class CloudMainActivity : ComponentActivity() {
 
                     item {
                         Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(20.dp),
+                            Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(18.dp),
                             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
                         ) {
-                            Column(
-                                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 15.dp),
-                                verticalArrangement = Arrangement.spacedBy(10.dp)
-                            ) {
-                                Text("Schedules", fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                                Text(
-                                    "$scheduleCount schedule(s) • ${schedules.count { it.enabled }} ON",
-                                    fontSize = 13.sp
-                                )
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                                ) {
-                                    OutlinedButton(
-                                        onClick = { showCreate = true },
-                                        modifier = Modifier.weight(1f).height(44.dp),
-                                        shape = RoundedCornerShape(22.dp)
-                                    ) {
-                                        Text("+ Add", fontSize = 13.sp, textAlign = TextAlign.Center)
+                            Column(Modifier.fillMaxWidth().padding(15.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                        Text("Schedules", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                                        Text("$scheduleCount schedules  •  ${schedules.count { it.enabled }} ON", fontSize = 12.sp)
                                     }
+                                    Text("${schedules.count { it.enabled }}/$scheduleCount", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                }
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Button(
+                                        onClick = { showCreate = true },
+                                        Modifier.weight(1f).height(42.dp),
+                                        shape = RoundedCornerShape(21.dp)
+                                    ) { Text("+ Add", fontSize = 13.sp) }
                                     OutlinedButton(
                                         onClick = { syncCloud() },
-                                        modifier = Modifier.weight(1f).height(44.dp),
-                                        shape = RoundedCornerShape(22.dp)
-                                    ) {
-                                        Text("Sync", fontSize = 13.sp, textAlign = TextAlign.Center)
-                                    }
+                                        Modifier.weight(1f).height(42.dp),
+                                        shape = RoundedCornerShape(21.dp)
+                                    ) { Text("Sync", fontSize = 13.sp) }
                                 }
                                 Divider()
-                                Text(status, fontSize = 12.sp)
+                                Text(status, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             }
                         }
                     }
 
                     if (schedules.isEmpty()) {
                         item {
-                            Card(
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(20.dp)
-                            ) {
-                                Column(
-                                    modifier = Modifier.fillMaxWidth().padding(20.dp),
-                                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                                ) {
-                                    Text("No schedules yet", fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                                    Text("Tap + Add or create one on the website.", fontSize = 13.sp)
+                            Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
+                                Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                                    Text("No schedules yet", fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                                    Text("Tap + Add or create one on the website.", fontSize = 12.sp)
                                 }
                             }
                         }
                     }
 
                     items(schedules, key = { it.id }) { schedule ->
-                        val track = LocalTrackStore.get(this@CloudMainActivity, schedule.id)
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(20.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = if (schedule.enabled) MaterialTheme.colorScheme.secondaryContainer
-                                else MaterialTheme.colorScheme.surfaceVariant
-                            )
-                        ) {
-                            Column(
-                                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 15.dp),
-                                verticalArrangement = Arrangement.spacedBy(9.dp)
-                            ) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Column(
-                                        Modifier.weight(1f),
-                                        verticalArrangement = Arrangement.spacedBy(3.dp)
-                                    ) {
-                                        Text(
-                                            schedule.name,
-                                            fontSize = 19.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
-                                        )
-                                        Text(
-                                            "${formatDate(schedule.scheduledDate)} · ${formatTime(schedule.time)}",
-                                            fontSize = 14.sp
-                                        )
-                                        Text(
-                                            if (schedule.enabled) "ON • will play automatically" else "OFF • not scheduled",
-                                            fontSize = 12.sp
-                                        )
-                                    }
-                                    Spacer(Modifier.size(8.dp))
-                                    Switch(
-                                        checked = schedule.enabled,
-                                        onCheckedChange = { setScheduleEnabled(schedule, it) },
-                                        enabled = schedule.enabled || track != null
-                                    )
-                                }
-
-                                Divider()
-
-                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                    Text("Music", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                    Text(
-                                        track?.name ?: "No local music selected",
-                                        fontSize = 13.sp,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                }
-
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                                ) {
-                                    Button(
-                                        onClick = { chooseMusic(schedule.id) },
-                                        modifier = Modifier.weight(1f).height(44.dp),
-                                        shape = RoundedCornerShape(22.dp)
-                                    ) {
-                                        Text(
-                                            if (track == null) "Choose music" else "Change music",
-                                            fontSize = 12.sp,
-                                            textAlign = TextAlign.Center
-                                        )
-                                    }
-                                    OutlinedButton(
-                                        onClick = { editing = schedule },
-                                        modifier = Modifier.weight(1f).height(44.dp),
-                                        shape = RoundedCornerShape(22.dp)
-                                    ) {
-                                        Text("Edit", fontSize = 12.sp, textAlign = TextAlign.Center)
-                                    }
-                                }
-
-                                OutlinedButton(
-                                    onClick = { deleteSchedule(schedule) },
-                                    modifier = Modifier.fillMaxWidth().height(44.dp),
-                                    shape = RoundedCornerShape(22.dp)
-                                ) {
-                                    Text("Delete schedule", fontSize = 12.sp, textAlign = TextAlign.Center)
-                                }
-                            }
-                        }
+                        ScheduleCard(schedule) { editing = schedule }
                     }
 
                     item {
-                        Spacer(Modifier.height(4.dp))
                         Text(
-                            "₹0 local playback • Music stays on your phone • Website + app share date, time and schedules",
-                            fontSize = 11.sp,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)
+                            "₹0 local playback  •  Music stays on your phone",
+                            Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                            fontSize = 10.sp,
+                            textAlign = TextAlign.Center
                         )
                     }
                 }
@@ -518,24 +400,95 @@ class CloudMainActivity : ComponentActivity() {
         }
 
         if (showCreate) {
-            ScheduleDialog(
-                title = "Create schedule",
-                initial = null,
-                onDismiss = { showCreate = false }
-            ) { name, date, time, _ ->
+            ScheduleDialog("Create schedule", null, { showCreate = false }) { name, date, time, _ ->
                 showCreate = false
                 createSchedule(name, date, time)
             }
         }
-
         editing?.let { schedule ->
-            ScheduleDialog(
-                title = "Edit schedule",
-                initial = schedule,
-                onDismiss = { editing = null }
-            ) { name, date, time, enabled ->
+            ScheduleDialog("Edit schedule", schedule, { editing = null }) { name, date, time, enabled ->
                 editing = null
                 updateSchedule(schedule, name, date, time, enabled)
+            }
+        }
+    }
+
+    @Composable
+    private fun SetupRow(number: String, text: String) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Surface(Modifier.size(24.dp), CircleShape, color = MaterialTheme.colorScheme.surface) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text(number, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+            Spacer(Modifier.size(10.dp))
+            Text(text, fontSize = 13.sp)
+        }
+    }
+
+    @Composable
+    private fun ScheduleCard(schedule: CloudScheduleStore.Schedule, onEdit: () -> Unit) {
+        val track = LocalTrackStore.get(this@CloudMainActivity, schedule.id)
+        Card(
+            Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(18.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        ) {
+            Column(Modifier.fillMaxWidth().padding(15.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(schedule.name, fontSize = 18.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(formatTime(schedule.time), fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                        Text(formatDate(schedule.scheduledDate), fontSize = 12.sp)
+                        Text(
+                            if (schedule.enabled) "ON  •  Will play automatically" else "OFF  •  Not scheduled",
+                            fontSize = 11.sp
+                        )
+                    }
+                    Switch(
+                        checked = schedule.enabled,
+                        onCheckedChange = { setScheduleEnabled(schedule, it) },
+                        enabled = schedule.enabled || track != null
+                    )
+                }
+
+                Divider()
+
+                Surface(
+                    Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant
+                ) {
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text("♫", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.size(10.dp))
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                            Text("Music", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            Text(track?.name ?: "No local music selected", fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                    }
+                }
+
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = { chooseMusic(schedule.id) },
+                        Modifier.weight(1f).height(42.dp),
+                        shape = RoundedCornerShape(21.dp)
+                    ) {
+                        Text(if (track == null) "Choose music" else "Change music", fontSize = 12.sp, textAlign = TextAlign.Center)
+                    }
+                    OutlinedButton(
+                        onClick = onEdit,
+                        Modifier.weight(1f).height(42.dp),
+                        shape = RoundedCornerShape(21.dp)
+                    ) { Text("Edit", fontSize = 12.sp) }
+                }
+
+                OutlinedButton(
+                    onClick = { deleteSchedule(schedule) },
+                    Modifier.fillMaxWidth().height(38.dp),
+                    shape = RoundedCornerShape(19.dp)
+                ) { Text("Delete schedule", fontSize = 11.sp) }
             }
         }
     }
@@ -554,58 +507,41 @@ class CloudMainActivity : ComponentActivity() {
 
         AlertDialog(
             onDismissRequest = onDismiss,
-            title = {
-                Text(title, fontWeight = FontWeight.Bold)
-            },
+            title = { Text(title, fontWeight = FontWeight.Bold) },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     OutlinedTextField(
                         value = name,
                         onValueChange = { name = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        label = { Text("Name") },
-                        singleLine = true
+                        Modifier.fillMaxWidth(),
+                        label = { Text("Schedule name") },
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp)
                     )
                     OutlinedButton(
                         onClick = {
                             val parsed = runCatching { LocalDate.parse(date) }.getOrDefault(LocalDate.now())
-                            DatePickerDialog(
-                                this@CloudMainActivity,
-                                { _, y, m, d -> date = "%04d-%02d-%02d".format(y, m + 1, d) },
-                                parsed.year,
-                                parsed.monthValue - 1,
-                                parsed.dayOfMonth
-                            ).show()
+                            DatePickerDialog(this@CloudMainActivity, { _, y, m, d -> date = "%04d-%02d-%02d".format(y, m + 1, d) }, parsed.year, parsed.monthValue - 1, parsed.dayOfMonth).show()
                         },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(14.dp)
-                    ) {
-                        Text("Date: ${formatDate(date)}", textAlign = TextAlign.Center)
-                    }
+                        Modifier.fillMaxWidth().height(48.dp),
+                        shape = RoundedCornerShape(12.dp)
+                    ) { Text("Date   ${formatDate(date)}", Modifier.fillMaxWidth(), textAlign = TextAlign.Start, fontSize = 13.sp) }
                     OutlinedButton(
                         onClick = {
                             val parts = time.split(":")
                             val hour = parts.getOrNull(0)?.toIntOrNull() ?: 7
                             val minute = parts.getOrNull(1)?.toIntOrNull() ?: 0
-                            TimePickerDialog(
-                                this@CloudMainActivity,
-                                { _, h, m -> time = "%02d:%02d".format(h, m) },
-                                hour,
-                                minute,
-                                false
-                            ).show()
+                            TimePickerDialog(this@CloudMainActivity, { _, h, m -> time = "%02d:%02d".format(h, m) }, hour, minute, false).show()
                         },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(14.dp)
-                    ) {
-                        Text("Time: ${formatTime(time)}", textAlign = TextAlign.Center)
-                    }
+                        Modifier.fillMaxWidth().height(48.dp),
+                        shape = RoundedCornerShape(12.dp)
+                    ) { Text("Time   ${formatTime(time)}", Modifier.fillMaxWidth(), textAlign = TextAlign.Start, fontSize = 13.sp) }
                     if (initial != null) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text("Enabled", modifier = Modifier.weight(1f), fontSize = 14.sp)
+                        Row(Modifier.fillMaxWidth().padding(horizontal = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text("Enable schedule", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                                Text(if (enabled) "Will play automatically" else "Will stay off", fontSize = 11.sp)
+                            }
                             Switch(checked = enabled, onCheckedChange = { enabled = it })
                         }
                     }
@@ -614,16 +550,12 @@ class CloudMainActivity : ComponentActivity() {
             confirmButton = {
                 Button(
                     enabled = name.isNotBlank(),
-                    onClick = { onSave(name.trim(), date, time, enabled) },
+                    onClick = { onSave(name.trim(), date, time.take(5), enabled) },
                     shape = RoundedCornerShape(20.dp)
-                ) {
-                    Text("Save", textAlign = TextAlign.Center)
-                }
+                ) { Text("Save", fontWeight = FontWeight.Bold) }
             },
             dismissButton = {
-                OutlinedButton(onClick = onDismiss, shape = RoundedCornerShape(20.dp)) {
-                    Text("Cancel", textAlign = TextAlign.Center)
-                }
+                OutlinedButton(onClick = onDismiss, shape = RoundedCornerShape(20.dp)) { Text("Cancel") }
             }
         )
     }
