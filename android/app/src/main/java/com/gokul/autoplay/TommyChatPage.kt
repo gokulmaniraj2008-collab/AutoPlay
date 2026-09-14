@@ -1,8 +1,14 @@
 package com.gokul.autoplay
 
+import android.Manifest
+import android.app.Activity
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.speech.RecognitionListener
+import android.speech.RecognizerIntent
+import android.speech.SpeechRecognizer
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -12,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -23,6 +30,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -47,10 +55,89 @@ fun TommyChatPage() {
         )
     }
     var input by remember { mutableStateOf("") }
+    var isListening by remember { mutableStateOf(false) }
+    var voiceStatus by remember { mutableStateOf("Tap 🎤 and speak") }
     val listState = rememberLazyListState()
+    val speechRecognizer = remember(context) {
+        if (SpeechRecognizer.isRecognitionAvailable(context)) SpeechRecognizer.createSpeechRecognizer(context) else null
+    }
+
+    DisposableEffect(speechRecognizer) {
+        if (speechRecognizer != null) {
+            speechRecognizer.setRecognitionListener(object : RecognitionListener {
+                override fun onReadyForSpeech(params: android.os.Bundle?) {
+                    isListening = true
+                    voiceStatus = "Listening… speak now"
+                }
+                override fun onBeginningOfSpeech() { voiceStatus = "Listening…" }
+                override fun onRmsChanged(rmsdB: Float) = Unit
+                override fun onBufferReceived(buffer: ByteArray?) = Unit
+                override fun onEndOfSpeech() {
+                    isListening = false
+                    voiceStatus = "Processing…"
+                }
+                override fun onError(error: Int) {
+                    isListening = false
+                    voiceStatus = when (error) {
+                        SpeechRecognizer.ERROR_NO_MATCH -> "Didn't catch that — tap 🎤 and try again"
+                        SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "Microphone permission is required"
+                        else -> "Voice input stopped — tap 🎤 to try again"
+                    }
+                }
+                override fun onResults(results: android.os.Bundle?) {
+                    isListening = false
+                    val spoken = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()?.trim().orEmpty()
+                    if (spoken.isNotEmpty()) {
+                        // The spoken words are placed directly into the same chat input box.
+                        input = spoken
+                        voiceStatus = "Text added to chat"
+                    } else {
+                        voiceStatus = "No speech detected"
+                    }
+                }
+                override fun onPartialResults(partialResults: android.os.Bundle?) {
+                    val partial = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty()
+                    if (partial.isNotBlank()) input = partial
+                }
+                override fun onEvent(eventType: Int, params: android.os.Bundle?) = Unit
+            })
+        }
+        onDispose { speechRecognizer?.destroy() }
+    }
 
     LaunchedEffect(messages.size) {
         if (messages.isNotEmpty()) listState.animateScrollToItem(messages.lastIndex)
+    }
+
+    fun startVoiceInput() {
+        if (speechRecognizer == null) {
+            voiceStatus = "Speech recognition is unavailable on this phone"
+            return
+        }
+        val activity = context as? Activity
+        if (activity != null && activity.checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            activity.requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), 4101)
+            voiceStatus = "Allow microphone access, then tap 🎤 again"
+            return
+        }
+        input = ""
+        voiceStatus = "Starting microphone…"
+        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+        }
+        speechRecognizer.startListening(intent)
+    }
+
+    fun sendMessage() {
+        val command = input.trim()
+        if (command.isNotEmpty()) {
+            messages.add(TommyMessage(false, command))
+            messages.add(TommyMessage(true, executeTommyChatCommand(context, command)))
+            input = ""
+            voiceStatus = "Tap 🎤 and speak"
+        }
     }
 
     Column(
@@ -58,7 +145,7 @@ fun TommyChatPage() {
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Text("Tommy Chat", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-        Text("Type a command and Tommy will execute it.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("Speak or type. Your spoken words appear here as text.", color = MaterialTheme.colorScheme.onSurfaceVariant)
 
         LazyColumn(
             state = listState,
@@ -67,6 +154,8 @@ fun TommyChatPage() {
         ) {
             items(messages) { message -> ChatBubble(message) }
         }
+
+        Text(voiceStatus, color = if (isListening) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
 
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
             OutlinedTextField(
@@ -77,16 +166,15 @@ fun TommyChatPage() {
                 singleLine = true,
                 shape = RoundedCornerShape(18.dp)
             )
-            Spacer(Modifier.padding(4.dp))
+            Spacer(Modifier.width(6.dp))
             Button(
-                onClick = {
-                    val command = input.trim()
-                    if (command.isNotEmpty()) {
-                        messages.add(TommyMessage(false, command))
-                        messages.add(TommyMessage(true, executeTommyChatCommand(context, command)))
-                        input = ""
-                    }
-                },
+                onClick = { if (isListening) speechRecognizer?.stopListening() else startVoiceInput() },
+                shape = RoundedCornerShape(18.dp),
+                modifier = Modifier.height(56.dp)
+            ) { Text(if (isListening) "■" else "🎤") }
+            Spacer(Modifier.width(6.dp))
+            Button(
+                onClick = { sendMessage() },
                 enabled = input.trim().isNotEmpty(),
                 shape = RoundedCornerShape(18.dp),
                 modifier = Modifier.height(56.dp)
@@ -149,6 +237,6 @@ private fun launchApp(context: Context, packageName: String, fallbackUrl: String
             })
         }
     } catch (_: Exception) {
-        // The chat still returns a response; Android will simply remain on AutoPlay if the target cannot open.
+        // Keep the chat response even if Android cannot launch the target.
     }
 }
