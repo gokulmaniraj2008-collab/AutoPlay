@@ -2,6 +2,7 @@ package com.gokul.autoplay
 
 import android.Manifest
 import android.accessibilityservice.AccessibilityServiceInfo
+import android.app.Activity
 import android.app.SearchManager
 import android.content.Context
 import android.content.Intent
@@ -31,7 +32,7 @@ object TaskExecutor {
     private fun searchYouTube(context: Context, query: String): Result {
         val value = query.trim().ifBlank { "Tamil songs" }
         val launch = context.packageManager.getLaunchIntentForPackage("com.google.android.youtube")
-        if (launch == null) return Result(false, "YouTube is not installed")
+            ?: return Result(false, "YouTube is not installed")
 
         return runCatching {
             val search = Intent(Intent.ACTION_SEARCH).apply {
@@ -47,6 +48,7 @@ object TaskExecutor {
                 val url = Uri.parse("https://www.youtube.com/results?search_query=${Uri.encode(value)}")
                 context.startActivity(Intent(Intent.ACTION_VIEW, url).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) })
             }
+            PhoneAutomationService.showCommandBubble()
             Result(true, "Searching YouTube for: $value")
         }.getOrElse {
             Result(false, "YouTube search could not be opened: ${it.message ?: "unknown error"}")
@@ -95,7 +97,11 @@ object TaskExecutor {
         val launch = context.packageManager.getLaunchIntentForPackage(packageName) ?: return Result(false, "$name is not installed")
         launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         context.startActivity(launch)
-        return Result(true, "Opened $name")
+        if (query.contains("youtube")) {
+            PhoneAutomationService.showCommandBubble()
+            if (context is Activity) context.moveTaskToBack(true)
+        }
+        return Result(true, "Opened $name. AutoPlay is now available as a floating command bubble.")
     }
 
     private fun runWhatsAppMessage(context: Context, target: String): Result {
