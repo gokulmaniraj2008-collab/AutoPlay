@@ -34,6 +34,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -42,8 +43,8 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 
 class MainActivity : ComponentActivity() {
-    private var tommyStatus = TommyStatusEvents.OFF
-    private var tommyStatusText = "Tommy is OFF"
+    private var tommyStatus by mutableStateOf(TommyStatusEvents.OFF)
+    private var tommyStatusText by mutableStateOf("Tommy is OFF")
 
     private val tommyStatusReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -51,13 +52,19 @@ class MainActivity : ComponentActivity() {
             tommyStatus = intent.getStringExtra(TommyStatusEvents.EXTRA_STATUS) ?: TommyStatusEvents.OFF
             tommyStatusText = intent.getStringExtra(TommyStatusEvents.EXTRA_TEXT)
                 ?: defaultTommyStatusText(tommyStatus)
-            renderApp()
         }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        renderApp()
+        setContent {
+            AutoPlayApp(
+                tommyStatus = tommyStatus,
+                tommyStatusText = tommyStatusText,
+                onStart = ::activateFloatingTommy,
+                onStop = ::deactivateFloatingTommy
+            )
+        }
     }
 
     override fun onStart() {
@@ -68,23 +75,11 @@ class MainActivity : ComponentActivity() {
             IntentFilter(TommyStatusEvents.ACTION),
             ContextCompat.RECEIVER_NOT_EXPORTED
         )
-        renderApp()
     }
 
     override fun onStop() {
         unregisterReceiver(tommyStatusReceiver)
         super.onStop()
-    }
-
-    private fun renderApp() {
-        setContent {
-            AutoPlayApp(
-                tommyStatus = tommyStatus,
-                tommyStatusText = tommyStatusText,
-                onStart = ::activateFloatingTommy,
-                onStop = ::deactivateFloatingTommy
-            )
-        }
     }
 
     private fun activateFloatingTommy() {
@@ -103,7 +98,6 @@ class MainActivity : ComponentActivity() {
         stopService(Intent(this, FloatingTommyService::class.java))
         tommyStatus = TommyStatusEvents.OFF
         tommyStatusText = "Tommy is OFF"
-        renderApp()
         Toast.makeText(this, "Tommy is off", Toast.LENGTH_SHORT).show()
     }
 
