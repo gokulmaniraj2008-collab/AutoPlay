@@ -28,6 +28,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.getValue
@@ -41,12 +42,17 @@ import java.util.Locale
 
 /** Unified AutoPlay hub for phone tasks, voice commands, scheduling and explicit phone access. */
 class TaskActivity : ComponentActivity() {
+    companion object {
+        const val EXTRA_START_VOICE = "com.gokul.autoplay.START_VOICE"
+    }
+
     private var command by mutableStateOf("")
     private var status by mutableStateOf("Ready — tell AutoPlay what to do on your phone.")
     private var lastResult by mutableStateOf("")
     private var listening by mutableStateOf(false)
     private var showAiModeDialog by mutableStateOf(false)
     private var speechRecognizer: SpeechRecognizer? = null
+    private var startVoiceAfterCreate = false
 
     private val callPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         status = if (granted) "Phone-call permission granted." else "Phone-call permission was not granted."
@@ -62,8 +68,20 @@ class TaskActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        startVoiceAfterCreate = intent.getBooleanExtra(EXTRA_START_VOICE, false)
         lastResult = TaskHistoryStore.last(this)
         setContent { Screen() }
+        if (startVoiceAfterCreate) {
+            window.decorView.postDelayed({ requestVoiceCommand() }, 350)
+        }
+    }
+
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (intent?.getBooleanExtra(EXTRA_START_VOICE, false) == true) {
+            window.decorView.postDelayed({ requestVoiceCommand() }, 200)
+        }
     }
 
     override fun onDestroy() {
@@ -98,6 +116,9 @@ class TaskActivity : ComponentActivity() {
             TaskHistoryStore.record(this, task, result)
             lastResult = TaskHistoryStore.last(this)
             status = result.message
+            if (result.success && (task.action == PhoneTask.Action.YOUTUBE_SEARCH || task.action == PhoneTask.Action.OPEN_APP)) {
+                moveTaskToBack(true)
+            }
         }
         command = ""
     }
@@ -110,17 +131,21 @@ class TaskActivity : ComponentActivity() {
         speechRecognizer?.destroy()
         speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this).also { recognizer ->
             recognizer.setRecognitionListener(object : RecognitionListener {
-                override fun onReadyForSpeech(params: Bundle?) { listening = true; status = "Listening…" }
+                override fun onReadyForSpeech(params: Bundle?) { listening = true; status = "Listening… Say a command." }
                 override fun onBeginningOfSpeech() { status = "Listening…" }
                 override fun onRmsChanged(rmsdB: Float) = Unit
                 override fun onBufferReceived(buffer: ByteArray?) = Unit
                 override fun onEndOfSpeech() { listening = false; status = "Processing command…" }
-                override fun onError(error: Int) { listening = false; status = "Voice input failed (code $error). Try again." }
+                override fun onError(error: Int) { listening = false; status = "Voice input failed (code $error). Tap the Hey Tommy bubble and try again." }
                 override fun onResults(results: Bundle?) {
                     listening = false
                     val spoken = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty()
-                    if (spoken.isBlank()) status = "I didn't catch that."
-                    else { command = spoken; status = "Heard: $spoken"; submitTask() }
+                    if (spoken.isBlank()) status = "I didn't catch that. Tap Hey Tommy and try again."
+                    else {
+                        command = spoken
+                        status = "Heard: $spoken"
+                        submitTask()
+                    }
                 }
                 override fun onPartialResults(partialResults: Bundle?) = Unit
                 override fun onEvent(eventType: Int, params: Bundle?) = Unit
@@ -165,7 +190,7 @@ class TaskActivity : ComponentActivity() {
             return
         }
         startService(Intent(this, AiModeOverlayService::class.java))
-        status = "Hey Tommy active — the small AutoPlay chatbot is ready over other apps."
+        status = "Hey Tommy active — the small chatbot bubble is ready. Tap it and speak your command."
     }
 
     private fun disableAiMode() {
@@ -192,7 +217,7 @@ class TaskActivity : ComponentActivity() {
                     Card(Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                             Text("Hey Tommy", style = MaterialTheme.typography.titleLarge)
-                            Text("Keep a small AutoPlay chatbot bubble visible while you use other apps.")
+                            Text("Keep a small chatbot bubble visible while you use other apps. Tap the bubble to start voice input immediately.")
                             Button(onClick = { showAiModeDialog = true }, modifier = Modifier.fillMaxWidth()) {
                                 Text("Activate Hey Tommy")
                             }
@@ -259,7 +284,7 @@ class TaskActivity : ComponentActivity() {
                 AlertDialog(
                     onDismissRequest = { showAiModeDialog = false },
                     title = { Text("Hey Tommy") },
-                    text = { Text("This option will activate Hey Tommy so a small AutoPlay chatbot bubble stays available while you use other apps. You can turn it off at any time.") },
+                    text = { Text("Activate a small floating chatbot bubble. Tap the bubble anytime to immediately start voice input, then AutoPlay will parse and execute the command.") },
                     confirmButton = { TextButton(onClick = { enableAiMode() }) { Text("OK") } },
                     dismissButton = { TextButton(onClick = { showAiModeDialog = false }) { Text("CANCEL") } }
                 )
