@@ -13,6 +13,7 @@ object CloudScheduleStore {
         val id: String,
         val name: String,
         val enabled: Boolean,
+        val scheduledDate: String?,
         val time: String,
         val playlistUrl: String,
         val timezone: String
@@ -30,6 +31,7 @@ object CloudScheduleStore {
                         id = item.getString("id"),
                         name = item.optString("name", "AutoPlay"),
                         enabled = item.optBoolean("enabled", true),
+                        scheduledDate = item.optString("scheduled_date", "").ifBlank { null },
                         time = item.optString("time", "15:00"),
                         playlistUrl = item.optString("playlist_url", ""),
                         timezone = item.optString("timezone", "Asia/Kolkata")
@@ -46,6 +48,7 @@ object CloudScheduleStore {
                 put("id", s.id)
                 put("name", s.name)
                 put("enabled", s.enabled)
+                put("scheduled_date", s.scheduledDate ?: JSONObject.NULL)
                 put("time", s.time)
                 put("playlist_url", s.playlistUrl)
                 put("timezone", s.timezone)
@@ -55,15 +58,12 @@ object CloudScheduleStore {
             .edit().putString(KEY_SCHEDULES, array.toString()).apply()
     }
 
-    fun find(context: Context, id: String): Schedule? =
-        loadAll(context).firstOrNull { it.id == id }
+    fun find(context: Context, id: String): Schedule? = loadAll(context).firstOrNull { it.id == id }
 
     fun lastOccurrence(context: Context, id: String): String? =
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getString(KEY_LAST_PREFIX + id, null)
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_LAST_PREFIX + id, null)
 
     fun markOccurrence(context: Context, id: String, occurrence: String) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit().putString(KEY_LAST_PREFIX + id, occurrence).apply()
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY_LAST_PREFIX + id, occurrence).apply()
     }
 }
