@@ -31,6 +31,7 @@ class FloatingTommyService : Service() {
     private var speechRecognizer: SpeechRecognizer? = null
     private val mainHandler = Handler(Looper.getMainLooper())
     private var listening = false
+    private var stopping = false
 
     override fun onCreate() {
         super.onCreate()
@@ -182,7 +183,7 @@ class FloatingTommyService : Service() {
     }
 
     private fun listenNow() {
-        if (!hasMicrophonePermission() || speechRecognizer == null) return
+        if (stopping || !hasMicrophonePermission() || speechRecognizer == null) return
 
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
@@ -202,7 +203,7 @@ class FloatingTommyService : Service() {
 
     private fun scheduleListeningRestart() {
         mainHandler.postDelayed({
-            if (!isDestroyed && !listening && speechRecognizer != null) {
+            if (!stopping && !listening && speechRecognizer != null) {
                 listenNow()
             }
         }, 600L)
@@ -212,6 +213,7 @@ class FloatingTommyService : Service() {
         lowercase().replace(Regex("[^a-z0-9 ]"), " ").replace(Regex("\\s+"), " ").trim()
 
     override fun onDestroy() {
+        stopping = true
         mainHandler.removeCallbacksAndMessages(null)
         speechRecognizer?.cancel()
         speechRecognizer?.destroy()
