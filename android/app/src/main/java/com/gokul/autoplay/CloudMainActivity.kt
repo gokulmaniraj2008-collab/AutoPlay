@@ -170,15 +170,8 @@ class CloudMainActivity : ComponentActivity() {
 
     @androidx.compose.runtime.Composable
     private fun BrandMark(size: Int = 88) {
-        Box(
-            modifier = Modifier.size(size.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Surface(
-                modifier = Modifier.fillMaxSize(),
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.primaryContainer
-            ) {}
+        Box(modifier = Modifier.size(size.dp), contentAlignment = Alignment.Center) {
+            Surface(modifier = Modifier.fillMaxSize(), shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer) {}
             Text("♫", style = MaterialTheme.typography.displayMedium, fontWeight = FontWeight.Bold)
         }
     }
@@ -242,18 +235,15 @@ class CloudMainActivity : ComponentActivity() {
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     item {
-                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                BrandMark(52)
-                                Spacer(Modifier.size(12.dp))
-                                Column {
-                                    Text("AutoPlay", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                                    Text("Your music. Your time.")
-                                }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            BrandMark(52)
+                            Spacer(Modifier.size(12.dp))
+                            Column {
+                                Text("AutoPlay", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                                Text("Your music. Your time.")
                             }
                         }
                     }
-
                     item {
                         Card(
                             modifier = Modifier.fillMaxWidth(),
@@ -273,7 +263,6 @@ class CloudMainActivity : ComponentActivity() {
                             }
                         }
                     }
-
                     item {
                         Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
                             Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -289,7 +278,6 @@ class CloudMainActivity : ComponentActivity() {
                             }
                         }
                     }
-
                     if (schedules.isEmpty()) {
                         item {
                             Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
@@ -300,15 +288,13 @@ class CloudMainActivity : ComponentActivity() {
                             }
                         }
                     }
-
                     items(schedules, key = { it.id }) { schedule ->
                         val track = LocalTrackStore.get(this@CloudMainActivity, schedule.id)
                         Card(
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(18.dp),
                             colors = CardDefaults.cardColors(
-                                containerColor = if (schedule.enabled) MaterialTheme.colorScheme.secondaryContainer
-                                else MaterialTheme.colorScheme.surfaceVariant
+                                containerColor = if (schedule.enabled) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant
                             )
                         ) {
                             Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -337,7 +323,6 @@ class CloudMainActivity : ComponentActivity() {
                             }
                         }
                     }
-
                     item {
                         Spacer(modifier = Modifier.height(8.dp))
                         Text("₹0 local playback • Music stays on your phone • No Spotify required", style = MaterialTheme.typography.bodySmall)
