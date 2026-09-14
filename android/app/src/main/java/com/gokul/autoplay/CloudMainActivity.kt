@@ -90,6 +90,31 @@ class CloudMainActivity : ComponentActivity() {
         return uri.lastPathSegment ?: "Local music"
     }
 
+    private fun setScheduleEnabled(schedule: CloudScheduleStore.Schedule, enabled: Boolean) {
+        if (enabled && LocalTrackStore.get(this, schedule.id) == null) {
+            status = "Choose local music before enabling this schedule."
+            return
+        }
+        status = if (enabled) "Enabling ${schedule.name}…" else "Disabling ${schedule.name}…"
+        CloudScheduleSync.setEnabled(this, schedule.id, enabled) { result ->
+            runOnUiThread {
+                result.onSuccess {
+                    schedules = CloudScheduleStore.loadAll(this)
+                    schedules.firstOrNull { it.id == schedule.id }?.let { updated ->
+                        if (updated.enabled) {
+                            ExactCloudAlarmScheduler.schedule(this, updated)
+                        } else {
+                            ExactCloudAlarmScheduler.cancel(this, updated.id)
+                        }
+                    }
+                    status = if (enabled) "${schedule.name} enabled and scheduled." else "${schedule.name} disabled and alarm cancelled."
+                }.onFailure { error ->
+                    status = "Could not change schedule: ${error.message ?: "unknown error"}"
+                }
+            }
+        }
+    }
+
     private fun syncCloud() {
         status = "Syncing from Supabase…"
         CloudScheduleSync.sync(this) { result ->
@@ -147,6 +172,13 @@ class CloudMainActivity : ComponentActivity() {
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
                                     Text(if (track == null) "Choose music" else "Change music")
+                                }
+                                Button(
+                                    onClick = { setScheduleEnabled(schedule, !schedule.enabled) },
+                                    enabled = schedule.enabled || track != null,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text(if (schedule.enabled) "Disable schedule" else "Enable schedule")
                                 }
                             }
                         }
