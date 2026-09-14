@@ -1,14 +1,13 @@
 package com.gokul.autoplay
 
 import android.accessibilityservice.AccessibilityService
-import android.accessibilityservice.GestureDescription
-import android.graphics.Path
-import android.view.accessibility.AccessibilityEvent
+import android.graphics.Rect
 import android.view.accessibility.AccessibilityNodeInfo
+import android.view.accessibility.AccessibilityEvent
+import android.os.Bundle
 
 class TommyAccessibilityService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent?) = Unit
-
     override fun onInterrupt() = Unit
 
     override fun onServiceConnected() {
@@ -21,68 +20,79 @@ class TommyAccessibilityService : AccessibilityService() {
         super.onDestroy()
     }
 
-    private fun openRecentAppsInternal() {
-        performGlobalAction(GLOBAL_ACTION_RECENTS)
+    private fun openRecentAppsInternal() { performGlobalAction(GLOBAL_ACTION_RECENTS) }
+
+    private fun performTommyActionInternal(action: String): Boolean {
+        return when (action) {
+            "OPEN_INSTAGRAM_REELS" -> findAndClickAny("Reels", "reels")
+            "SCROLL_REEL" -> dispatchSwipe(0.50f, 0.78f, 0.50f, 0.25f, 350)
+            "LIKE_REEL" -> {
+                val clicked = findAndClickAny("Like", "like")
+                if (!clicked) dispatchTapNearRightCenter(0.90f, 0.62f) else true
+            }
+            "FOLLOW_ACCOUNT" -> {
+                val clicked = findAndClickAny("Follow", "follow")
+                if (!clicked) findAndClickAny("Follow back", "follow back") else true
+            }
+            "OPEN_COMMENTS" -> {
+                val clicked = findAndClickAny("Comment", "comment", "Comments", "comments")
+                if (!clicked) dispatchTapNearRightCenter(0.90f, 0.53f) else true
+            }
+            else -> false
+        }
     }
 
-    private fun openInstagramReelsInternal(): Boolean {
+    private fun findAndClickAny(vararg labels: String): Boolean {
         val root = rootInActiveWindow ?: return false
-        val candidates = listOf("Reels", "reels")
-        for (label in candidates) {
+        for (label in labels) {
             val nodes = root.findAccessibilityNodeInfosByText(label)
             for (node in nodes) {
-                if (node.isVisibleToUser && node.isClickable && node.performAction(AccessibilityNodeInfo.ACTION_CLICK)) return true
-                var parent = node.parent
-                repeat(3) {
-                    if (parent?.isVisibleToUser == true && parent.isClickable && parent.performAction(AccessibilityNodeInfo.ACTION_CLICK)) return true
-                    parent = parent?.parent
-                }
+                if (clickNodeOrParent(node)) return true
             }
         }
         return false
     }
 
-    private fun scrollReelInternal(): Boolean {
-        val root = rootInActiveWindow
-        val scrollable = findScrollableNode(root)
-        if (scrollable != null && scrollable.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)) return true
-
-        // Instagram Reels uses a full-screen vertical feed, so fall back to a swipe gesture.
-        val path = Path().apply {
-            moveTo(resources.displayMetrics.widthPixels * 0.5f, resources.displayMetrics.heightPixels * 0.78f)
-            lineTo(resources.displayMetrics.widthPixels * 0.5f, resources.displayMetrics.heightPixels * 0.22f)
+    private fun clickNodeOrParent(node: AccessibilityNodeInfo?): Boolean {
+        var current = node
+        repeat(5) {
+            if (current == null) return false
+            if (current.isClickable && current.isEnabled) return current.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+            current = current.parent
         }
-        val gesture = GestureDescription.Builder()
-            .addStroke(GestureDescription.StrokeDescription(path, 0, 450))
+        return false
+    }
+
+    private fun dispatchTapNearRightCenter(xRatio: Float, yRatio: Float): Boolean {
+        val metrics = resources.displayMetrics
+        val x = metrics.widthPixels * xRatio
+        val y = metrics.heightPixels * yRatio
+        return dispatchGesture(TapGesture(x, y).build(), null, null)
+    }
+
+    private fun dispatchSwipe(x1: Float, y1: Float, x2: Float, y2: Float, duration: Long): Boolean {
+        val metrics = resources.displayMetrics
+        val path = android.graphics.Path().apply {
+            moveTo(metrics.widthPixels * x1, metrics.heightPixels * y1)
+            lineTo(metrics.widthPixels * x2, metrics.heightPixels * y2)
+        }
+        val gesture = android.accessibilityservice.GestureDescription.Builder()
+            .addStroke(android.accessibilityservice.GestureDescription.StrokeDescription(path, 0, duration))
             .build()
         return dispatchGesture(gesture, null, null)
     }
 
-    private fun findScrollableNode(node: AccessibilityNodeInfo?): AccessibilityNodeInfo? {
-        if (node == null) return null
-        if (node.isVisibleToUser && node.isScrollable) return node
-        for (i in 0 until node.childCount) {
-            val found = findScrollableNode(node.getChild(i))
-            if (found != null) return found
-        }
-        return null
+    private class TapGesture(x: Float, y: Float) {
+        private val path = android.graphics.Path().apply { moveTo(x, y); lineTo(x + 1f, y + 1f) }
+        fun build(): android.accessibilityservice.GestureDescription = android.accessibilityservice.GestureDescription.Builder()
+            .addStroke(android.accessibilityservice.GestureDescription.StrokeDescription(path, 0, 80))
+            .build()
     }
 
     companion object {
-        @Volatile
-        private var instance: TommyAccessibilityService? = null
+        @Volatile private var instance: TommyAccessibilityService? = null
 
-        fun requestRecentApps() {
-            instance?.openRecentAppsInternal()
-        }
-
-        fun performTommyAction(action: String): Boolean {
-            val service = instance ?: return false
-            return when (action) {
-                "OPEN_INSTAGRAM_REELS" -> service.openInstagramReelsInternal()
-                "SCROLL_REEL" -> service.scrollReelInternal()
-                else -> false
-            }
-        }
+        fun requestRecentApps() { instance?.openRecentAppsInternal() }
+        fun performTommyAction(action: String): Boolean = instance?.performTommyActionInternal(action) == true
     }
 }
