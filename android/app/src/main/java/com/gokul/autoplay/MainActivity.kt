@@ -17,12 +17,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -45,12 +43,7 @@ import androidx.core.content.ContextCompat
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent {
-            AutoPlayApp(
-                onTommyStart = ::activateFloatingTommy,
-                onTommyStop = ::deactivateFloatingTommy
-            )
-        }
+        setContent { AutoPlayApp(::activateFloatingTommy, ::deactivateFloatingTommy) }
     }
 
     private fun activateFloatingTommy() {
@@ -73,45 +66,30 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun AutoPlayApp(onTommyStart: () -> Unit, onTommyStop: () -> Unit) {
+private fun AutoPlayApp(onStart: () -> Unit, onStop: () -> Unit) {
     var page by remember { mutableIntStateOf(0) }
     var tommyEnabled by remember { mutableStateOf(false) }
-
-    val startTommy = {
-        tommyEnabled = true
-        onTommyStart()
-    }
-    val stopTommy = {
-        tommyEnabled = false
-        onTommyStop()
-    }
+    val start = { tommyEnabled = true; onStart() }
+    val stop = { tommyEnabled = false; onStop() }
 
     MaterialTheme {
-        Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-            Scaffold(
-                bottomBar = {
-                    NavigationBar {
-                        NavigationBarItem(page == 0, { page = 0 }, icon = { Text("⌂") }, label = { Text("Home") })
-                        NavigationBarItem(page == 1, { page = 1 }, icon = { Text("⚡") }, label = { Text("Commands") })
-                        NavigationBarItem(page == 5, { page = 5 }, icon = { Text("T") }, label = { Text("Tommy") })
-                    }
+        Surface(Modifier.fillMaxSize()) {
+            Scaffold(bottomBar = {
+                NavigationBar {
+                    NavigationBarItem(page == 0, { page = 0 }, icon = { Text("⌂") }, label = { Text("Home") })
+                    NavigationBarItem(page == 1, { page = 1 }, icon = { Text("⚡") }, label = { Text("Pages") })
+                    NavigationBarItem(page == 5, { page = 5 }, icon = { Text("T") }, label = { Text("Tommy") })
                 }
-            ) { padding ->
+            }) { padding ->
                 Box(Modifier.fillMaxSize().padding(padding)) {
                     when (page) {
-                        0 -> HomePage(onOpenPages = { page = 1 }, onTommy = startTommy)
-                        1 -> PageIndex(onSelectPage = { page = it })
+                        0 -> HomePage({ page = 1 }, start)
+                        1 -> PageIndex { page = it }
                         2 -> QuickCommandsPage()
                         3 -> AutomationPage()
-                        4 -> BackgroundSearchPage()
-                        5 -> VoiceAssistantPage()
+                        4 -> BackgroundSearchPage(tommyEnabled, { if (it) start() else stop() })
+                        5 -> VoiceAssistantPage(tommyEnabled, { if (it) start() else stop() })
                         6 -> FloatingAssistantPage()
-                    }
-
-                    when (page) {
-                        4 -> BottomAction("Enable Tommy floating mode", startTommy)
-                        5 -> BottomAction(if (tommyEnabled) "Tommy is ON — Turn OFF" else "Start Hey Tommy", if (tommyEnabled) stopTommy else startTommy)
-                        6 -> BottomAction("Enable draggable Tommy bubble", startTommy)
                     }
                 }
             }
@@ -120,52 +98,43 @@ private fun AutoPlayApp(onTommyStart: () -> Unit, onTommyStop: () -> Unit) {
 }
 
 @Composable
-private fun HomePage(onOpenPages: () -> Unit, onTommy: () -> Unit) {
-    Column(Modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 32.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+private fun HomePage(onPages: () -> Unit, onTommy: () -> Unit) {
+    Column(Modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Text("AutoPlay", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
         Text("Your music. Your commands. Automatically.", color = MaterialTheme.colorScheme.onSurfaceVariant)
         Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
             Column(Modifier.padding(20.dp)) {
                 Text("READY TO PLAY", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(8.dp))
-                Text("Six functional app pages", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                Text("Commands, automation, background mode, floating Tommy and voice control.")
+                Text("Six app pages", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Text("Commands, automation, background mode, voice and floating Tommy.")
             }
         }
-        Button(onClick = onOpenPages, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) { Text("Open Pages 2–6") }
+        Button(onClick = onPages, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) { Text("Open Pages 2–6") }
         OutlinedButton(onClick = onTommy, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) { Text("Start Tommy") }
     }
 }
 
 @Composable
-private fun PageIndex(onSelectPage: (Int) -> Unit) {
+private fun PageIndex(onSelect: (Int) -> Unit) {
     val pages = listOf(
-        2 to "Quick Commands" to "Light, YouTube, Instagram and WhatsApp",
-        3 to "Automations" to "Automation controls and routines",
-        4 to "Background Search" to "Keep Tommy available over other apps",
-        6 to "Floating Assistant" to "Draggable floating Tommy bubble",
-        5 to "Hey Tommy" to "Wake phrase and voice commands"
+        Triple(2, "Quick Commands", "Flashlight, YouTube, Instagram and WhatsApp"),
+        Triple(3, "Automations", "Automation controls and routines"),
+        Triple(4, "Background Search", "Keep Tommy available over other apps"),
+        Triple(5, "Hey Tommy", "Wake phrase and voice commands"),
+        Triple(6, "Floating Assistant", "Draggable floating Tommy bubble")
     )
-    Column(Modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 28.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(Modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("Pages 2–6", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-        Text("Each page now has a direct navigation path.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        pages.forEach { (pageAndTitle, description) ->
-            val pageNumber = pageAndTitle.first
-            val title = pageAndTitle.second
-            Card(onClick = { onSelectPage(pageNumber) }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp)) {
+        Text("Direct access to every page.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        pages.forEach { (number, title, description) ->
+            Card(onClick = { onSelect(number) }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp)) {
                 Column(Modifier.padding(18.dp)) {
-                    Text("PAGE $pageNumber", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                    Text("PAGE $number", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
                     Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                     Text(description, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun BottomAction(label: String, action: () -> Unit) {
-    Box(Modifier.fillMaxSize().padding(16.dp), contentAlignment = Alignment.BottomCenter) {
-        Button(onClick = action, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) { Text(label) }
     }
 }
