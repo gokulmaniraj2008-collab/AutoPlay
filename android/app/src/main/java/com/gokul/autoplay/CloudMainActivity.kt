@@ -50,6 +50,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 
 class CloudMainActivity : ComponentActivity() {
     private var status by mutableStateOf("Ready")
@@ -98,7 +99,7 @@ class CloudMainActivity : ComponentActivity() {
 
     private fun createSchedule(name: String, date: String, time: String) {
         CloudScheduleSync.create(this, name, date, time, false, java.util.TimeZone.getDefault().id) { result -> runOnUiThread {
-            result.onSuccess { syncCloud(); status = "Schedule created for $date at $time. Choose music to finish setup." }
+            result.onSuccess { syncCloud(); status = "Schedule created for ${formatDate(date)} at ${formatTime(time)}. Choose music to finish setup." }
                 .onFailure { status = "Could not create schedule: ${it.message ?: "unknown error"}" }
         }}
     }
@@ -109,7 +110,7 @@ class CloudMainActivity : ComponentActivity() {
                 val updated = schedule.copy(name = name, scheduledDate = date, time = time, enabled = enabled)
                 CloudScheduleStore.saveAll(this, CloudScheduleStore.loadAll(this).map { if (it.id == schedule.id) updated else it })
                 if (enabled && LocalTrackStore.get(this, schedule.id) != null) ExactCloudAlarmScheduler.schedule(this, updated) else ExactCloudAlarmScheduler.cancel(this, schedule.id)
-                schedules = CloudScheduleStore.loadAll(this); status = "Schedule updated."
+                schedules = CloudScheduleStore.loadAll(this); status = "Schedule updated for ${formatDate(date)} at ${formatTime(time)}."
             }.onFailure { status = "Could not update schedule: ${it.message ?: "unknown error"}" }
         }}
     }
@@ -127,6 +128,19 @@ class CloudMainActivity : ComponentActivity() {
             result.onSuccess { schedules = CloudScheduleStore.loadAll(this); scheduleCount = schedules.size; status = "${schedule.name} deleted." }
                 .onFailure { status = "Could not delete schedule: ${it.message ?: "unknown error"}" }
         }}
+    }
+
+    private fun formatDate(value: String?): String {
+        if (value.isNullOrBlank()) return "Every day"
+        return runCatching { LocalDate.parse(value).format(DateTimeFormatter.ofPattern("dd MMM yyyy")) }.getOrDefault(value)
+    }
+
+    private fun formatTime(value: String): String {
+        val parts = value.take(5).split(":")
+        val hour = parts.getOrNull(0)?.toIntOrNull() ?: return value.take(5)
+        val minute = parts.getOrNull(1)?.toIntOrNull() ?: 0
+        val suffix = if (hour >= 12) "PM" else "AM"
+        return "%d:%02d %s".format(hour % 12, minute, suffix).replace("0:", "12:")
     }
 
     @Composable private fun AppRoot() {
@@ -155,7 +169,7 @@ class CloudMainActivity : ComponentActivity() {
             items(schedules, key = { it.id }) { schedule ->
                 val track = LocalTrackStore.get(this@CloudMainActivity, schedule.id)
                 Card(Modifier.fillMaxWidth(), RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = if (schedule.enabled) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant)) { Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(schedule.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold); Text(schedule.scheduledDate ?: "Every day", style = MaterialTheme.typography.titleMedium); Text(schedule.time.take(5), style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold); Text(if (schedule.enabled) "ON • will play automatically" else "OFF • not scheduled") }; Switch(checked = schedule.enabled, onCheckedChange = { setScheduleEnabled(schedule, it) }, enabled = schedule.enabled || track != null) }
+                    Row(verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(schedule.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold); Text("📅 ${formatDate(schedule.scheduledDate)}", style = MaterialTheme.typography.titleMedium); Text("⏰ ${formatTime(schedule.time)}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); Text(if (schedule.enabled) "ON • will play automatically" else "OFF • not scheduled") }; Switch(checked = schedule.enabled, onCheckedChange = { setScheduleEnabled(schedule, it) }, enabled = schedule.enabled || track != null) }
                     Divider(); Text("Music", fontWeight = FontWeight.Bold); Text(track?.name ?: "No local music selected"); Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) { Button({ chooseMusic(schedule.id) }, Modifier.weight(1f)) { Text(if (track == null) "Choose music" else "Change music") }; OutlinedButton({ editing = schedule }, Modifier.weight(1f)) { Text("Edit") } }
                     OutlinedButton({ deleteSchedule(schedule) }, Modifier.fillMaxWidth()) { Text("Delete schedule") }
                 } }
@@ -177,11 +191,11 @@ class CloudMainActivity : ComponentActivity() {
             OutlinedButton({
                 val parsed = runCatching { LocalDate.parse(date) }.getOrDefault(LocalDate.now())
                 DatePickerDialog(this@CloudMainActivity, { _, y, m, d -> date = "%04d-%02d-%02d".format(y, m + 1, d) }, parsed.year, parsed.monthValue - 1, parsed.dayOfMonth).show()
-            }, Modifier.fillMaxWidth()) { Text("Date: $date") }
+            }, Modifier.fillMaxWidth()) { Text("Date: ${formatDate(date)}") }
             OutlinedButton({
                 val parts = time.split(":"); val hour = parts.getOrNull(0)?.toIntOrNull() ?: 7; val minute = parts.getOrNull(1)?.toIntOrNull() ?: 0
                 TimePickerDialog(this@CloudMainActivity, { _, h, m -> time = "%02d:%02d".format(h, m) }, hour, minute, false).show()
-            }, Modifier.fillMaxWidth()) { Text("Time: $time") }
+            }, Modifier.fillMaxWidth()) { Text("Time: ${formatTime(time)}") }
             if (initial != null) Row(verticalAlignment = Alignment.CenterVertically) { Text("Enabled", Modifier.weight(1f)); Switch(enabled, { enabled = it }) }
         } }, confirmButton = { Button(enabled = name.isNotBlank(), onClick = { onSave(name.trim(), date, time, enabled) }) { Text("Save") } }, dismissButton = { OutlinedButton(onDismiss) { Text("Cancel") } })
     }
