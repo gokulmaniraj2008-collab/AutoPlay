@@ -18,7 +18,7 @@ import android.widget.TextView
 import androidx.core.app.NotificationCompat
 import kotlin.math.roundToInt
 
-/** Small, user-visible chatbot bubble shown while the user has enabled AI Mode. */
+/** Small, user-visible Hey Tommy chatbot bubble shown while the user has enabled the service. */
 class AiModeOverlayService : Service() {
     private var windowManager: WindowManager? = null
     private var bubble: TextView? = null
@@ -34,8 +34,8 @@ class AiModeOverlayService : Service() {
 
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
         bubble = TextView(this).apply {
-            text = "AI"
-            textSize = 12f
+            text = "T"
+            textSize = 14f
             setTextColor(Color.WHITE)
             gravity = Gravity.CENTER
             background = GradientDrawable().apply {
@@ -44,7 +44,7 @@ class AiModeOverlayService : Service() {
                 setStroke(dp(2), Color.WHITE)
             }
             elevation = dp(8).toFloat()
-            contentDescription = "AutoPlay AI Mode"
+            contentDescription = "Hey Tommy chatbot"
             setOnClickListener {
                 val intent = Intent(this@AiModeOverlayService, TaskActivity::class.java).apply {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
@@ -70,18 +70,18 @@ class AiModeOverlayService : Service() {
     }
 
     private fun startAiModeForegroundNotification() {
-        val channelId = "ai_mode"
+        val channelId = "hey_tommy"
         val manager = getSystemService(NotificationManager::class.java)
         if (Build.VERSION.SDK_INT >= 26) {
             manager.createNotificationChannel(
-                NotificationChannel(channelId, "AutoPlay AI Mode", NotificationManager.IMPORTANCE_LOW).apply {
-                    description = "Keeps the user-enabled AutoPlay AI Mode bubble available over other apps."
+                NotificationChannel(channelId, "Hey Tommy", NotificationManager.IMPORTANCE_LOW).apply {
+                    description = "Keeps the user-enabled Hey Tommy chatbot bubble available over other apps."
                 }
             )
         }
         val notification = NotificationCompat.Builder(this, channelId)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
-            .setContentTitle("AutoPlay AI Mode")
+            .setContentTitle("Hey Tommy")
             .setContentText("The floating AutoPlay chatbot is active.")
             .setOngoing(true)
             .build()
