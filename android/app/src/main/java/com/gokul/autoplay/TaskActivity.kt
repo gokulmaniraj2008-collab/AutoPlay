@@ -50,6 +50,10 @@ class TaskActivity : ComponentActivity() {
         status = if (granted) "Phone-call permission granted." else "Phone-call permission was not granted."
     }
 
+    private val cameraPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        status = if (granted) "Camera/flashlight permission granted. You can now say: turn on my phone light." else "Camera permission is needed for flashlight control."
+    }
+
     private val audioPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) startVoiceInput() else status = "Microphone permission is required for voice commands."
     }
@@ -69,6 +73,15 @@ class TaskActivity : ComponentActivity() {
     private fun submitTask() {
         val parsed = TaskParser.parse(command)
         val task = parsed.task ?: run { status = parsed.message; return }
+
+        if ((task.action == PhoneTask.Action.FLASHLIGHT_ON || task.action == PhoneTask.Action.FLASHLIGHT_OFF) &&
+            checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED
+        ) {
+            status = "Camera permission is needed to control the flashlight."
+            cameraPermission.launch(Manifest.permission.CAMERA)
+            return
+        }
+
         TaskStore.upsert(this, task)
         val scheduled = task.scheduledAtMillis != null
         if (scheduled) {
@@ -133,6 +146,8 @@ class TaskActivity : ComponentActivity() {
 
     private fun requestCallPermission() { callPermission.launch(Manifest.permission.CALL_PHONE) }
 
+    private fun requestCameraPermission() { cameraPermission.launch(Manifest.permission.CAMERA) }
+
     private fun openAccessibilitySettings() {
         startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
         status = "In Android Settings, enable AutoPlay's Phone Automation service if it is shown."
@@ -144,7 +159,6 @@ class TaskActivity : ComponentActivity() {
     private fun Screen() {
         MaterialTheme {
             Surface(Modifier.fillMaxSize()) {
-                // Match the comfortable top spacing seen in apps such as YouTube.
                 Column(
                     Modifier
                         .fillMaxSize()
@@ -160,7 +174,7 @@ class TaskActivity : ComponentActivity() {
                     Card(Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                             Text("AI Phone Task", style = MaterialTheme.typography.titleLarge)
-                            OutlinedTextField(value = command, onValueChange = { command = it }, modifier = Modifier.fillMaxWidth(), minLines = 3, label = { Text("What should your phone do?") }, placeholder = { Text("Open WhatsApp and send Praneesh Hi") })
+                            OutlinedTextField(value = command, onValueChange = { command = it }, modifier = Modifier.fillMaxWidth(), minLines = 3, label = { Text("What should your phone do?") }, placeholder = { Text("Turn on my phone light") })
                             Button(onClick = { submitTask() }, modifier = Modifier.fillMaxWidth()) { Text("Run / Schedule") }
                             Button(onClick = { requestVoiceCommand() }, modifier = Modifier.fillMaxWidth(), enabled = !listening) { Text(if (listening) "Listening…" else "🎙 Speak Task") }
                         }
@@ -171,6 +185,7 @@ class TaskActivity : ComponentActivity() {
                             Text("Phone Access", style = MaterialTheme.typography.titleLarge)
                             Text("AutoPlay uses Android capabilities only after you explicitly authorize them.")
                             OutlinedButton(onClick = { openAccessibilitySettings() }, modifier = Modifier.fillMaxWidth()) { Text("Enable Phone Automation") }
+                            OutlinedButton(onClick = { requestCameraPermission() }, modifier = Modifier.fillMaxWidth()) { Text("Allow flashlight") }
                             OutlinedButton(onClick = { requestCallPermission() }, modifier = Modifier.fillMaxWidth()) { Text("Allow phone calls") }
                             OutlinedButton(onClick = { requestExactAlarmPermission() }, modifier = Modifier.fillMaxWidth()) { Text("Allow exact-time automation") }
                         }
@@ -179,6 +194,8 @@ class TaskActivity : ComponentActivity() {
                     Card(Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                             Text("Examples", style = MaterialTheme.typography.titleLarge)
+                            Text("• Turn on my phone light")
+                            Text("• Turn off my flashlight")
                             Text("• Open WhatsApp and send Praneesh Hi")
                             Text("• Open Instagram")
                             Text("• Change my Instagram bio to: Agricultural Engineer 🚜")
