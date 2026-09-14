@@ -4,9 +4,10 @@ import android.accessibilityservice.AccessibilityService
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
-import android.view.View
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
+import android.view.inputmethod.InputMethodManager
+import android.content.Context
 import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
@@ -65,16 +66,17 @@ class PhoneAutomationService : AccessibilityService() {
         super.onDestroy()
     }
 
-    private fun overlayParams(width: Int, height: Int): WindowManager.LayoutParams = WindowManager.LayoutParams(
+    private fun overlayParams(width: Int, height: Int, focusable: Boolean = false): WindowManager.LayoutParams = WindowManager.LayoutParams(
         width,
         height,
         WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
-        WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+        if (focusable) WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN else WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
         android.graphics.PixelFormat.TRANSLUCENT
     ).apply {
         gravity = Gravity.BOTTOM or Gravity.END
         x = 18
         y = 110
+        if (focusable) softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE or WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE
     }
 
     private fun showBubble() {
@@ -159,9 +161,10 @@ class PhoneAutomationService : AccessibilityService() {
         root.addView(input, LinearLayout.LayoutParams(-1, dp(52)))
         root.addView(run, LinearLayout.LayoutParams(-1, dp(50)))
         panel = root
-        runCatching { windowManager?.addView(panel, overlayParams(dp(300), dp(160))) }
+        runCatching { windowManager?.addView(panel, overlayParams(dp(300), dp(160), focusable = true)) }
             .onFailure { panel = null; showBubble() }
         input.requestFocus()
+        (getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager).showSoftInput(input, InputMethodManager.SHOW_IMPLICIT)
     }
 
     private fun collapseBubble() {
