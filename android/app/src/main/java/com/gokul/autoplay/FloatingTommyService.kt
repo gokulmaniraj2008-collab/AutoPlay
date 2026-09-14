@@ -66,17 +66,14 @@ class FloatingTommyService : Service() {
     }
 
     private fun hasMicrophonePermission(): Boolean =
-        ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
-            PackageManager.PERMISSION_GRANTED
+        ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
 
     private fun showBubble() {
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
-
         val bubbleBackground = GradientDrawable().apply {
             shape = GradientDrawable.OVAL
             setColor(Color.rgb(35, 105, 255))
         }
-
         val view = TextView(this).apply {
             text = "T"
             textSize = 18f
@@ -85,11 +82,9 @@ class FloatingTommyService : Service() {
             background = bubbleBackground
             elevation = 12f
         }
-
         val size = (56 * resources.displayMetrics.density).toInt()
         val params = WindowManager.LayoutParams(
-            size,
-            size,
+            size, size,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
             PixelFormat.TRANSLUCENT
@@ -98,14 +93,12 @@ class FloatingTommyService : Service() {
             x = resources.displayMetrics.widthPixels - size - (16 * resources.displayMetrics.density).toInt()
             y = resources.displayMetrics.heightPixels / 2 - size / 2
         }
-
         var downRawX = 0f
         var downRawY = 0f
         var startX = 0
         var startY = 0
         var moved = false
         val touchSlop = (8 * resources.displayMetrics.density).toInt()
-
         view.setOnTouchListener { _, event ->
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
@@ -126,15 +119,12 @@ class FloatingTommyService : Service() {
                     true
                 }
                 MotionEvent.ACTION_UP -> {
-                    if (!moved) {
-                        enterDirectCommandMode()
-                    }
+                    if (!moved) enterDirectCommandMode()
                     true
                 }
                 else -> true
             }
         }
-
         bubble = view
         windowManager?.addView(view, params)
     }
@@ -151,7 +141,6 @@ class FloatingTommyService : Service() {
 
     private fun startHeyTommyListening() {
         if (listening || !SpeechRecognizer.isRecognitionAvailable(this)) return
-
         speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this).apply {
             setRecognitionListener(object : RecognitionListener {
                 override fun onReadyForSpeech(params: android.os.Bundle?) {
@@ -159,9 +148,7 @@ class FloatingTommyService : Service() {
                     if (commandMode) {
                         bubble?.text = "…"
                         sendStatus(TommyStatusEvents.LISTENING, "Tommy is listening…")
-                    } else {
-                        bubble?.text = "T"
-                    }
+                    } else bubble?.text = "T"
                 }
 
                 override fun onBeginningOfSpeech() {
@@ -195,9 +182,7 @@ class FloatingTommyService : Service() {
                         if (heardText.isNotBlank()) {
                             sendStatus(TommyStatusEvents.HEARD, "Tommy heard: $heardText")
                             executeVoiceCommand(heardText)
-                        } else {
-                            sendStatus(TommyStatusEvents.ON, "Tommy is ON")
-                        }
+                        } else sendStatus(TommyStatusEvents.ON, "Tommy is ON")
                         mainHandler.postDelayed({ bubble?.text = "T" }, 1200L)
                         scheduleListeningRestart()
                         return
@@ -215,71 +200,43 @@ class FloatingTommyService : Service() {
                         }
                         mainHandler.postDelayed({ bubble?.text = "T" }, 1200L)
                     }
-
                     scheduleListeningRestart()
                 }
 
                 override fun onPartialResults(partialResults: android.os.Bundle?) {
-                    val matches = partialResults
-                        ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                        .orEmpty()
+                    val matches = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION).orEmpty()
                     val partialText = matches.firstOrNull()?.normalizeVoiceText().orEmpty()
                     if (commandMode && partialText.isNotBlank()) {
                         sendStatus(TommyStatusEvents.LISTENING, "Tommy heard: $partialText")
-                    } else if (matches.any { it.normalizeVoiceText().contains("hey tommy") }) {
-                        bubble?.text = "✓"
-                    }
+                    } else if (matches.any { it.normalizeVoiceText().contains("hey tommy") }) bubble?.text = "✓"
                 }
 
                 override fun onEvent(eventType: Int, params: android.os.Bundle?) = Unit
             })
         }
-
         listenNow()
     }
 
     private fun executeVoiceCommand(command: String) {
         sendStatus(TommyStatusEvents.WORKING, "Tommy is working…")
         when {
-            command.contains("light") && (command.contains("on") || command.contains("turn")) -> {
-                setFlashlight(true)
-            }
-            command.contains("light") && command.contains("off") -> {
-                setFlashlight(false)
-            }
-            command.contains("instagram") && command.contains("close") -> {
-                openRecentApps("Instagram")
-            }
-            command.contains("youtube") && command.contains("close") -> {
-                openRecentApps("YouTube")
-            }
-            command.contains("whatsapp") && command.contains("close") -> {
-                openRecentApps("WhatsApp")
-            }
-            command.contains("google") && command.contains("close") -> {
-                openRecentApps("Google")
-            }
-            command.contains("instagram") -> {
-                openApp("Instagram", "com.instagram.android", "https://www.instagram.com")
-            }
-            command.contains("youtube") -> {
-                openApp("YouTube", "com.google.android.youtube", "https://www.youtube.com")
-            }
-            command.contains("google") -> {
-                openApp("Google", "com.google.android.googlequicksearchbox", "https://www.google.com")
-            }
-            command.contains("whatsapp") -> {
-                openWhatsApp()
-            }
+            command.contains("light") && (command.contains("on") || command.contains("turn")) -> setFlashlight(true)
+            command.contains("light") && command.contains("off") -> setFlashlight(false)
+            command.contains("instagram") && command.contains("close") -> openRecentApps("Instagram")
+            command.contains("youtube") && command.contains("close") -> openRecentApps("YouTube")
+            command.contains("whatsapp") && command.contains("close") -> openRecentApps("WhatsApp")
+            command.contains("google") && command.contains("close") -> openRecentApps("Google")
+            command.contains("instagram") -> openApp("Instagram", "com.instagram.android", "https://www.instagram.com")
+            command.contains("youtube") -> openApp("YouTube", "com.google.android.youtube", "https://www.youtube.com")
+            command.contains("google") -> openApp("Google", "com.google.android.googlequicksearchbox", "https://www.google.com")
+            command.contains("whatsapp") -> openWhatsApp()
             else -> toast("Tommy heard: $command")
         }
     }
 
     private fun openRecentApps(appName: String) {
         try {
-            startActivity(Intent("android.intent.action.RECENT_APPS").apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            })
+            startActivity(Intent("android.intent.action.RECENT_APPS").apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) })
             toast("Recent Apps opened — swipe $appName away to close it")
         } catch (_: Exception) {
             toast("Android did not allow Recent Apps to open")
@@ -292,19 +249,15 @@ class FloatingTommyService : Service() {
             sendStatus(TommyStatusEvents.ON, "Tommy is ON")
             return
         }
-
         val cameraManager = getSystemService(Context.CAMERA_SERVICE) as CameraManager
         val cameraId = cameraManager.cameraIdList.firstOrNull { id ->
-            cameraManager.getCameraCharacteristics(id)
-                .get(CameraCharacteristics.FLASH_INFO_AVAILABLE) == true
+            cameraManager.getCameraCharacteristics(id).get(CameraCharacteristics.FLASH_INFO_AVAILABLE) == true
         }
-
         if (cameraId == null) {
             toast("This phone has no available flashlight")
             sendStatus(TommyStatusEvents.ON, "Tommy is ON")
             return
         }
-
         try {
             cameraManager.setTorchMode(cameraId, enabled)
             flashlightOn = enabled
@@ -325,12 +278,9 @@ class FloatingTommyService : Service() {
             sendStatus(TommyStatusEvents.ON, "Tommy is ON")
             return
         }
-
         try {
             toast("OK, opening $appName in browser")
-            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(fallbackUrl)).apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            })
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(fallbackUrl)).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) })
             sendStatus(TommyStatusEvents.ON, "Tommy is ON")
         } catch (_: Exception) {
             toast("$appName is not available")
@@ -345,7 +295,6 @@ class FloatingTommyService : Service() {
             putExtra(Intent.EXTRA_TEXT, "")
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
-
         try {
             toast("OK, opening WhatsApp")
             startActivity(whatsappIntent)
@@ -366,6 +315,7 @@ class FloatingTommyService : Service() {
 
     private fun toast(message: String) {
         mainHandler.post {
+            sendStatus(TommyStatusEvents.MESSAGE, message)
             Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
             textToSpeech?.speak(message, TextToSpeech.QUEUE_FLUSH, null, "tommy")
         }
@@ -373,7 +323,6 @@ class FloatingTommyService : Service() {
 
     private fun listenNow() {
         if (stopping || !hasMicrophonePermission() || speechRecognizer == null) return
-
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, "en-IN")
@@ -382,7 +331,6 @@ class FloatingTommyService : Service() {
             putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 1500L)
             putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 1000L)
         }
-
         try {
             speechRecognizer?.startListening(intent)
         } catch (_: Exception) {
@@ -392,9 +340,7 @@ class FloatingTommyService : Service() {
 
     private fun scheduleListeningRestart() {
         mainHandler.postDelayed({
-            if (!stopping && !listening && speechRecognizer != null) {
-                listenNow()
-            }
+            if (!stopping && !listening && speechRecognizer != null) listenNow()
         }, 600L)
     }
 
@@ -420,9 +366,7 @@ class FloatingTommyService : Service() {
         textToSpeech?.stop()
         textToSpeech?.shutdown()
         textToSpeech = null
-        bubble?.let { view ->
-            if (view.isAttachedToWindow) windowManager?.removeView(view)
-        }
+        bubble?.let { view -> if (view.isAttachedToWindow) windowManager?.removeView(view) }
         bubble = null
         windowManager = null
         super.onDestroy()
@@ -432,11 +376,7 @@ class FloatingTommyService : Service() {
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID,
-                "Hey Tommy",
-                NotificationManager.IMPORTANCE_LOW
-            ).apply {
+            val channel = NotificationChannel(NotificationChannelId, "Hey Tommy", NotificationManager.IMPORTANCE_LOW).apply {
                 description = "Keeps the floating Tommy assistant and voice listener active"
             }
             getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
@@ -445,7 +385,7 @@ class FloatingTommyService : Service() {
 
     private fun buildNotification(): Notification {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            Notification.Builder(this, CHANNEL_ID)
+            Notification.Builder(this, NotificationChannelId)
                 .setContentTitle("Hey Tommy is listening")
                 .setContentText("Say Hey Tommy to activate the assistant")
                 .setSmallIcon(android.R.drawable.ic_btn_speak_now)
@@ -463,7 +403,7 @@ class FloatingTommyService : Service() {
     }
 
     companion object {
-        private const val CHANNEL_ID = "tommy_floating"
+        private const val NotificationChannelId = "tommy_floating"
         private const val NOTIFICATION_ID = 1001
     }
 }
