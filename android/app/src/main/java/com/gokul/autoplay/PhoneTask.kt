@@ -14,6 +14,7 @@ data class PhoneTask(
         CALL,
         OPEN_APP,
         OPEN_URL,
+        YOUTUBE_SEARCH,
         SEND_WHATSAPP,
         EDIT_INSTAGRAM_BIO,
         FLASHLIGHT_ON,
