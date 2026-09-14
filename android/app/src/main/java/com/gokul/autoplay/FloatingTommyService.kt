@@ -5,11 +5,15 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.PixelFormat
 import android.graphics.drawable.GradientDrawable
+import android.hardware.camera2.CameraCharacteristics
+import android.hardware.camera2.CameraManager
+import android.net.Uri
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
@@ -22,6 +26,7 @@ import android.view.Gravity
 import android.view.MotionEvent
 import android.view.WindowManager
 import android.widget.TextView
+import android.widget.Toast
 import androidx.core.content.ContextCompat
 import kotlin.math.abs
 
@@ -32,6 +37,7 @@ class FloatingTommyService : Service() {
     private val mainHandler = Handler(Looper.getMainLooper())
     private var listening = false
     private var stopping = false
+    private var flashlightOn = false
 
     override fun onCreate() {
         super.onCreate()
@@ -98,18 +104,15 @@ class FloatingTommyService : Service() {
                     moved = false
                     true
                 }
-
                 MotionEvent.ACTION_MOVE -> {
                     val dx = (event.rawX - downRawX).toInt()
                     val dy = (event.rawY - downRawY).toInt()
                     if (abs(dx) > touchSlop || abs(dy) > touchSlop) moved = true
-
                     params.x = (startX + dx).coerceIn(0, resources.displayMetrics.widthPixels - size)
                     params.y = (startY + dy).coerceIn(0, resources.displayMetrics.heightPixels - size)
                     windowManager?.updateViewLayout(view, params)
                     true
                 }
-
                 MotionEvent.ACTION_UP -> {
                     if (!moved) {
                         startActivity(
@@ -120,7 +123,6 @@ class FloatingTommyService : Service() {
                     }
                     true
                 }
-
                 else -> true
             }
         }
@@ -156,10 +158,17 @@ class FloatingTommyService : Service() {
                     listening = false
                     val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                         .orEmpty()
+                    val heardText = matches.firstOrNull()?.normalizeVoiceText().orEmpty()
                     val heardHeyTommy = matches.any { it.normalizeVoiceText().contains("hey tommy") }
 
                     if (heardHeyTommy) {
                         bubble?.text = "✓"
+                        val command = heardText.substringAfter("hey tommy", "").trim()
+                        if (command.isNotBlank()) {
+                            executeVoiceCommand(command)
+                        } else {
+                            toast("Tommy is ready")
+                        }
                         mainHandler.postDelayed({ bubble?.text = "T" }, 1200)
                     }
 
@@ -180,6 +189,97 @@ class FloatingTommyService : Service() {
         }
 
         listenNow()
+    }
+
+    private fun executeVoiceCommand(command: String) {
+        when {
+            command.contains("light") && (command.contains("on") || command.contains("turn")) -> {
+                setFlashlight(true)
+            }
+            command.contains("light") && command.contains("off") -> {
+                setFlashlight(false)
+            }
+            command.contains("instagram") -> {
+                openApp("com.instagram.android", "https://www.instagram.com")
+            }
+            command.contains("youtube") -> {
+                openApp("com.google.android.youtube", "https://www.youtube.com")
+            }
+            command.contains("whatsapp") -> {
+                openWhatsApp()
+            }
+            else -> toast("Tommy heard: $command")
+        }
+    }
+
+    private fun setFlashlight(enabled: Boolean) {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+            toast("Camera permission needed for the flashlight. Open Commands → Light once to allow it.")
+            return
+        }
+
+        val cameraManager = getSystemService(Context.CAMERA_SERVICE) as CameraManager
+        val cameraId = cameraManager.cameraIdList.firstOrNull { id ->
+            cameraManager.getCameraCharacteristics(id)
+                .get(CameraCharacteristics.FLASH_INFO_AVAILABLE) == true
+        }
+
+        if (cameraId == null) {
+            toast("This phone has no available flashlight")
+            return
+        }
+
+        try {
+            cameraManager.setTorchMode(cameraId, enabled)
+            flashlightOn = enabled
+            toast(if (enabled) "Flashlight ON" else "Flashlight OFF")
+        } catch (_: Exception) {
+            toast("Unable to control flashlight")
+        }
+    }
+
+    private fun openApp(packageName: String, fallbackUrl: String) {
+        val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
+        if (launchIntent != null) {
+            launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            startActivity(launchIntent)
+            return
+        }
+
+        try {
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(fallbackUrl)).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            })
+        } catch (_: Exception) {
+            toast("App is not available")
+        }
+    }
+
+    private fun openWhatsApp() {
+        val whatsappIntent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            setPackage("com.whatsapp")
+            putExtra(Intent.EXTRA_TEXT, "")
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+
+        try {
+            startActivity(whatsappIntent)
+        } catch (_: Exception) {
+            val launchIntent = packageManager.getLaunchIntentForPackage("com.whatsapp")
+            if (launchIntent != null) {
+                launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                startActivity(launchIntent)
+            } else {
+                toast("WhatsApp is not installed")
+            }
+        }
+    }
+
+    private fun toast(message: String) {
+        mainHandler.post {
+            Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun listenNow() {
