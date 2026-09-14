@@ -29,6 +29,7 @@ class CloudMainActivity : ComponentActivity() {
     private var status by mutableStateOf("Cloud schedules not synced")
     private var scheduleCount by mutableStateOf(0)
     private var exactAlarmReady by mutableStateOf(false)
+    private var spotifyReady by mutableStateOf(false)
 
     private val notificationPermission = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -53,6 +54,25 @@ class CloudMainActivity : ComponentActivity() {
     private fun requestExactAlarmPermission() {
         if (Build.VERSION.SDK_INT >= 31) {
             startActivity(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:$packageName")))
+        }
+    }
+
+    private fun connectSpotify() {
+        if (SpotifyConfig.clientId.isBlank()) {
+            status = "Spotify Client ID is not configured in the Android build."
+            return
+        }
+        status = "Connecting to Spotify…"
+        SpotifyPlayback.connectForSetup(this) { result ->
+            runOnUiThread {
+                result.onSuccess {
+                    spotifyReady = true
+                    status = "Spotify connected. Scheduled play() is ready."
+                }.onFailure { error ->
+                    spotifyReady = false
+                    status = "Spotify connection failed: ${error.message ?: "unknown error"}"
+                }
+            }
         }
     }
 
@@ -84,16 +104,20 @@ class CloudMainActivity : ComponentActivity() {
                     Text("Cloud-controlled Spotify scheduling")
                     Text("Schedules on device: $scheduleCount")
                     Text(if (exactAlarmReady) "✓ Precise alarms enabled" else "⚠ Precise alarms permission required")
+                    Text(if (spotifyReady) "✓ Spotify App Remote connected" else "⚠ Spotify not connected")
                     Text(status, style = MaterialTheme.typography.bodyMedium)
                     if (!exactAlarmReady) {
                         Button(onClick = { requestExactAlarmPermission() }, modifier = Modifier.fillMaxWidth()) {
                             Text("Allow precise schedule alarms")
                         }
                     }
+                    Button(onClick = { connectSpotify() }, modifier = Modifier.fillMaxWidth()) {
+                        Text(if (spotifyReady) "Reconnect Spotify" else "Connect Spotify")
+                    }
                     Button(onClick = { syncCloud() }, modifier = Modifier.fillMaxWidth()) {
                         Text("Sync from Supabase")
                     }
-                    Text("Keep Spotify installed and signed in. At the scheduled time AutoPlay opens the saved playlist in Spotify.")
+                    Text("Connect Spotify once. At the scheduled time AutoPlay calls Spotify playerApi.play() for the saved playlist.")
                 }
             }
         }
