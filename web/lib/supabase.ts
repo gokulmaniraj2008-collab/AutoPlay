@@ -14,4 +14,7 @@ export type Schedule = {
   timezone: string;
   created_at: string;
   updated_at: string;
+  last_triggered_at?: string | null;
+  last_status?: string | null;
+  last_error?: string | null;
 };
