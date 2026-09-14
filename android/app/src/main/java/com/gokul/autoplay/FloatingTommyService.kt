@@ -12,8 +12,10 @@ import android.os.Build
 import android.os.IBinder
 import android.provider.Settings
 import android.view.Gravity
+import android.view.MotionEvent
 import android.view.WindowManager
 import android.widget.TextView
+import kotlin.math.abs
 
 class FloatingTommyService : Service() {
     private var windowManager: WindowManager? = null
@@ -41,17 +43,6 @@ class FloatingTommyService : Service() {
             gravity = Gravity.CENTER
             background = bubbleBackground
             elevation = 12f
-            setOnClickListener {
-                startActivity(
-                    Intent(this@FloatingTommyService, MainActivity::class.java).apply {
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                    }
-                )
-            }
-            setOnLongClickListener {
-                stopSelf()
-                true
-            }
         }
 
         val size = (56 * resources.displayMetrics.density).toInt()
@@ -62,8 +53,53 @@ class FloatingTommyService : Service() {
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
             PixelFormat.TRANSLUCENT
         ).apply {
-            gravity = Gravity.END or Gravity.CENTER_VERTICAL
-            x = (16 * resources.displayMetrics.density).toInt()
+            gravity = Gravity.TOP or Gravity.START
+            x = resources.displayMetrics.widthPixels - size - (16 * resources.displayMetrics.density).toInt()
+            y = resources.displayMetrics.heightPixels / 2 - size / 2
+        }
+
+        var downRawX = 0f
+        var downRawY = 0f
+        var startX = 0
+        var startY = 0
+        var moved = false
+        val touchSlop = (8 * resources.displayMetrics.density).toInt()
+
+        view.setOnTouchListener { _, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    downRawX = event.rawX
+                    downRawY = event.rawY
+                    startX = params.x
+                    startY = params.y
+                    moved = false
+                    true
+                }
+
+                MotionEvent.ACTION_MOVE -> {
+                    val dx = (event.rawX - downRawX).toInt()
+                    val dy = (event.rawY - downRawY).toInt()
+                    if (abs(dx) > touchSlop || abs(dy) > touchSlop) moved = true
+
+                    params.x = (startX + dx).coerceIn(0, resources.displayMetrics.widthPixels - size)
+                    params.y = (startY + dy).coerceIn(0, resources.displayMetrics.heightPixels - size)
+                    windowManager?.updateViewLayout(view, params)
+                    true
+                }
+
+                MotionEvent.ACTION_UP -> {
+                    if (!moved) {
+                        startActivity(
+                            Intent(this@FloatingTommyService, MainActivity::class.java).apply {
+                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                            }
+                        )
+                    }
+                    true
+                }
+
+                else -> true
+            }
         }
 
         bubble = view
