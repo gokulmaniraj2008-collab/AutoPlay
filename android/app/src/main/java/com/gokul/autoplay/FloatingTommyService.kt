@@ -26,6 +26,8 @@ import android.view.WindowManager
 import android.widget.TextView
 import android.widget.Toast
 import androidx.core.content.ContextCompat
+import org.json.JSONObject
+import java.net.URLEncoder
 import java.util.Locale
 import kotlin.math.abs
 
@@ -37,6 +39,7 @@ class FloatingTommyService : Service(), TommyVoiceController.Listener {
     private var stopping = false
     private var commandMode = false
     private var flashlightOn = false
+    private var supabaseBridge: SupabaseTommyBridge? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -53,6 +56,9 @@ class FloatingTommyService : Service(), TommyVoiceController.Listener {
         }
         TommyVoiceController.addListener(this)
         showBubble()
+        supabaseBridge = SupabaseTommyBridge(applicationContext) { remote ->
+            executeRemoteCommand(remote)
+        }.also { it.start() }
         sendStatus(TommyStatusEvents.ON, "Tommy is ON")
         startHeyTommyListening()
     }
@@ -167,6 +173,38 @@ class FloatingTommyService : Service(), TommyVoiceController.Listener {
         }
     }
 
+    private fun executeRemoteCommand(commandRow: JSONObject): String {
+        val raw = commandRow.optString("command")
+        val ai = try { JSONObject(raw) } catch (_: Exception) { JSONObject().put("action", "none").put("reply", "I received the command but could not parse the AI action.") }
+        val action = ai.optString("action", "none")
+        val query = ai.optString("query", "").trim()
+        val target = ai.optString("target", "").trim()
+        sendStatus(TommyStatusEvents.WORKING, "Tommy is executing: ${ai.optString("reply", raw)}")
+        when (action) {
+            "open_instagram_reels" -> { openUrl("https://www.instagram.com/reels/"); return "Done — opening Instagram Reels." }
+            "open_instagram_comments" -> { openApp("Instagram", "com.instagram.android", "https://www.instagram.com/"); return "Instagram opened. Comments require the visible post UI/accessibility layer." }
+            "spotify_search" -> { openUrl("https://open.spotify.com/search/${URLEncoder.encode(query, "UTF-8")}"); return "Done — opening Spotify search for $query." }
+            "search_web" -> { openUrl("https://www.google.com/search?q=${URLEncoder.encode(query, "UTF-8")}"); return "Done — searching Google for $query." }
+            "open_app" -> {
+                val normalized = (target.ifBlank { query }).lowercase()
+                return when {
+                    normalized.contains("instagram") -> { openApp("Instagram", "com.instagram.android", "https://www.instagram.com"); "Done — opening Instagram." }
+                    normalized.contains("youtube") -> { openApp("YouTube", "com.google.android.youtube", "https://www.youtube.com"); "Done — opening YouTube." }
+                    normalized.contains("spotify") -> { openApp("Spotify", "com.spotify.music", "https://open.spotify.com"); "Done — opening Spotify." }
+                    normalized.contains("whatsapp") -> { openWhatsApp(); "Done — opening WhatsApp." }
+                    normalized.contains("google") -> { openApp("Google", "com.google.android.googlequicksearchbox", "https://www.google.com"); "Done — opening Google." }
+                    else -> "I understood the request, but I don't have a safe launcher for $target yet."
+                }
+            }
+            else -> return ai.optString("reply", "I understood you, but no Android action was selected.")
+        }
+    }
+
+    private fun openUrl(url: String) {
+        try { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }) }
+        catch (_: Exception) { throw IllegalStateException("Could not open $url") }
+    }
+
     private fun openRecentApps(appName: String) { try { startActivity(Intent("android.intent.action.RECENT_APPS").apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }); toast("Recent Apps opened — swipe $appName away to close it") } catch (_: Exception) { toast("Android did not allow Recent Apps to open") } }
 
     private fun setFlashlight(enabled: Boolean) {
@@ -179,15 +217,15 @@ class FloatingTommyService : Service(), TommyVoiceController.Listener {
 
     private fun openApp(appName: String, packageName: String, fallbackUrl: String) {
         val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
-        if (launchIntent != null) { toast("OK, opening $appName"); launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(launchIntent); sendStatus(TommyStatusEvents.ON, "Tommy is ON"); return }
-        try { toast("OK, opening $appName in browser"); startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(fallbackUrl)).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }) } catch (_: Exception) { toast("$appName is not available") }
+        if (launchIntent != null) { toast("OK, opening $appName"); launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(launchIntent); return }
+        try { toast("OK, opening $appName in browser"); startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(fallbackUrl)).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }) } catch (_: Exception) { throw IllegalStateException("$appName is not available") }
     }
 
     private fun openWhatsApp() {
         val whatsappIntent = Intent(Intent.ACTION_SEND).apply { type = "text/plain"; setPackage("com.whatsapp"); putExtra(Intent.EXTRA_TEXT, ""); addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
         try { toast("OK, opening WhatsApp"); startActivity(whatsappIntent) } catch (_: Exception) {
             val launchIntent = packageManager.getLaunchIntentForPackage("com.whatsapp")
-            if (launchIntent != null) { toast("OK, opening WhatsApp"); launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(launchIntent) } else toast("WhatsApp is not installed")
+            if (launchIntent != null) { toast("OK, opening WhatsApp"); launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(launchIntent) } else throw IllegalStateException("WhatsApp is not installed")
         }
     }
 
@@ -201,6 +239,7 @@ class FloatingTommyService : Service(), TommyVoiceController.Listener {
 
     override fun onDestroy() {
         stopping = true; isRunning = false; mainHandler.removeCallbacksAndMessages(null)
+        supabaseBridge?.stop(); supabaseBridge = null
         TommyVoiceController.removeListener(this); TommyVoiceController.cancel()
         sendStatus(TommyStatusEvents.OFF, "Tommy is OFF")
         textToSpeech?.stop(); textToSpeech?.shutdown(); textToSpeech = null
