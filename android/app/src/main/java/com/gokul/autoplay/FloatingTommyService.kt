@@ -5,7 +5,6 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
-import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -201,16 +200,16 @@ class FloatingTommyService : Service() {
                 setFlashlight(false)
             }
             command.contains("instagram") && command.contains("close") -> {
-                openRecentApps()
+                openRecentApps("Instagram")
             }
             command.contains("youtube") && command.contains("close") -> {
-                openRecentApps()
+                openRecentApps("YouTube")
             }
             command.contains("whatsapp") && command.contains("close") -> {
-                openRecentApps()
+                openRecentApps("WhatsApp")
             }
             command.contains("google") && command.contains("close") -> {
-                openRecentApps()
+                openRecentApps("Google")
             }
             command.contains("instagram") -> {
                 openApp("com.instagram.android", "https://www.instagram.com")
@@ -228,30 +227,15 @@ class FloatingTommyService : Service() {
         }
     }
 
-    private fun openRecentApps() {
-        if (!isTommyAccessibilityEnabled()) {
-            toast("Enable Tommy Accessibility to use close-app commands")
-            try {
-                startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                })
-            } catch (_: Exception) {
-                toast("Open Settings → Accessibility manually")
-            }
-            return
+    private fun openRecentApps(appName: String) {
+        try {
+            startActivity(Intent("android.intent.action.RECENT_APPS").apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            })
+            toast("Recent Apps opened — swipe $appName away to close it")
+        } catch (_: Exception) {
+            toast("Android did not allow Recent Apps to open")
         }
-
-        TommyAccessibilityService.requestRecentApps()
-        toast("Recent Apps opened — swipe the app away to close it")
-    }
-
-    private fun isTommyAccessibilityEnabled(): Boolean {
-        val enabledServices = Settings.Secure.getString(
-            contentResolver,
-            Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
-        ).orEmpty()
-        val component = ComponentName(this, TommyAccessibilityService::class.java).flattenToString()
-        return enabledServices.split(':').any { it.equals(component, ignoreCase = true) }
     }
 
     private fun setFlashlight(enabled: Boolean) {
