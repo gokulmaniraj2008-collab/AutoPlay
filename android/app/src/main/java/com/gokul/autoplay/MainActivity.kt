@@ -1,6 +1,9 @@
 package com.gokul.autoplay
 
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
+import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Arrangement
@@ -34,16 +37,31 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent { AutoPlayPage1() }
+        setContent { AutoPlayPage1(onTommyClick = ::activateFloatingTommy) }
+    }
+
+    private fun activateFloatingTommy() {
+        if (!Settings.canDrawOverlays(this)) {
+            val intent = Intent(
+                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                Uri.parse("package:$packageName")
+            )
+            startActivity(intent)
+            return
+        }
+
+        val serviceIntent = Intent(this, FloatingTommyService::class.java)
+        ContextCompat.startForegroundService(this, serviceIntent)
     }
 }
 
 @Composable
-private fun AutoPlayPage1() {
+private fun AutoPlayPage1(onTommyClick: () -> Unit) {
     var selectedTab by remember { mutableIntStateOf(0) }
 
     MaterialTheme {
@@ -174,9 +192,8 @@ private fun AutoPlayPage1() {
                         }
                     }
 
-                    // New technique: a floating center action keeps Hey Tommy available from every tab.
                     FloatingActionButton(
-                        onClick = { selectedTab = 1 },
+                        onClick = onTommyClick,
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
                             .padding(bottom = 72.dp),
