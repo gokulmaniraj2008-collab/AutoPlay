@@ -16,6 +16,8 @@ data class PhoneTask(
         OPEN_URL,
         SEND_WHATSAPP,
         EDIT_INSTAGRAM_BIO,
+        FLASHLIGHT_ON,
+        FLASHLIGHT_OFF,
         UNKNOWN
     }
 }
