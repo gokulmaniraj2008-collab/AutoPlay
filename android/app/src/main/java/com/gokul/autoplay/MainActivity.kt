@@ -1,6 +1,8 @@
 package com.gokul.autoplay
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
@@ -52,6 +54,15 @@ class MainActivity : ComponentActivity() {
                 Uri.parse("package:$packageName")
             )
             startActivity(intent)
+            return
+        }
+
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            startActivity(
+                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                    data = Uri.parse("package:$packageName")
+                }
+            )
             return
         }
 
