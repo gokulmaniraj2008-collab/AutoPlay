@@ -22,13 +22,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -44,6 +45,7 @@ class TaskActivity : ComponentActivity() {
     private var status by mutableStateOf("Ready — tell AutoPlay what to do on your phone.")
     private var lastResult by mutableStateOf("")
     private var listening by mutableStateOf(false)
+    private var showAiModeDialog by mutableStateOf(false)
     private var speechRecognizer: SpeechRecognizer? = null
 
     private val callPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -155,6 +157,22 @@ class TaskActivity : ComponentActivity() {
 
     private fun openSchedules() { startActivity(Intent(this, CloudMainActivity::class.java)) }
 
+    private fun enableAiMode() {
+        showAiModeDialog = false
+        if (!Settings.canDrawOverlays(this)) {
+            status = "Allow AutoPlay to appear over other apps, then tap AI Mode again."
+            startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
+            return
+        }
+        startService(Intent(this, AiModeOverlayService::class.java))
+        status = "AI Mode active — the small AutoPlay chatbot is ready over other apps."
+    }
+
+    private fun disableAiMode() {
+        stopService(Intent(this, AiModeOverlayService::class.java))
+        status = "AI Mode turned off."
+    }
+
     @androidx.compose.runtime.Composable
     private fun Screen() {
         MaterialTheme {
@@ -170,6 +188,19 @@ class TaskActivity : ComponentActivity() {
                     Text("AutoPlay", style = MaterialTheme.typography.headlineLarge)
                     Text("Your AI phone automation hub", style = MaterialTheme.typography.titleMedium)
                     Text("Give one command. AutoPlay understands it, runs it now, or schedules it for later.")
+
+                    Card(Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Text("AI Mode", style = MaterialTheme.typography.titleLarge)
+                            Text("Keep a small AutoPlay chatbot bubble visible while you use other apps.")
+                            Button(onClick = { showAiModeDialog = true }, modifier = Modifier.fillMaxWidth()) {
+                                Text("Activate AI Mode")
+                            }
+                            OutlinedButton(onClick = { disableAiMode() }, modifier = Modifier.fillMaxWidth()) {
+                                Text("Turn off AI Mode")
+                            }
+                        }
+                    }
 
                     Card(Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -222,6 +253,16 @@ class TaskActivity : ComponentActivity() {
                         }
                     }
                 }
+            }
+
+            if (showAiModeDialog) {
+                AlertDialog(
+                    onDismissRequest = { showAiModeDialog = false },
+                    title = { Text("AI Mode") },
+                    text = { Text("This option will activate AutoPlay AI Mode so a small chatbot bubble stays available while you use other apps. You can turn it off at any time.") },
+                    confirmButton = { TextButton(onClick = { enableAiMode() }) { Text("OK") } },
+                    dismissButton = { TextButton(onClick = { showAiModeDialog = false }) { Text("CANCEL") } }
+                )
             }
         }
     }
