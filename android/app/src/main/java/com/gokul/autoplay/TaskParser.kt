@@ -13,6 +13,8 @@ object TaskParser {
         val lower = raw.lowercase(Locale.getDefault())
 
         val action = when {
+            isFlashlightOnCommand(lower) -> PhoneTask.Action.FLASHLIGHT_ON
+            isFlashlightOffCommand(lower) -> PhoneTask.Action.FLASHLIGHT_OFF
             isInstagramBioCommand(lower) -> PhoneTask.Action.EDIT_INSTAGRAM_BIO
             isWhatsAppMessageCommand(lower) -> PhoneTask.Action.SEND_WHATSAPP
             "spotify" in lower || "song" in lower || "music" in lower -> PhoneTask.Action.PLAY_SPOTIFY
@@ -23,7 +25,7 @@ object TaskParser {
         }
 
         if (action == PhoneTask.Action.UNKNOWN) {
-            return ParseResult(null, "Try: open WhatsApp and send Praneesh Hi, change Instagram bio to ..., open Instagram, or open another app.")
+            return ParseResult(null, "Try: turn on the flashlight, turn off the flashlight, open WhatsApp and send Praneesh Hi, change Instagram bio to ..., or open another app.")
         }
 
         val scheduledAt = parseTime(raw, nowMillis)
@@ -44,6 +46,18 @@ object TaskParser {
             enabled = true
         )
         return ParseResult(task, if (scheduledAt == null) "Ready to run now." else "Scheduled for ${java.text.SimpleDateFormat("dd MMM, h:mm a", Locale.getDefault()).format(scheduledAt)}.")
+    }
+
+    private fun isFlashlightOnCommand(lower: String): Boolean {
+        val light = "flashlight" in lower || "torch" in lower || "phone light" in lower || "phone torch" in lower
+        val on = "turn on" in lower || "switch on" in lower || "switch on" in lower || "light on" in lower || lower.endsWith(" on") || lower == "light"
+        return light && on || lower.contains("light on") && !lower.contains("screen light")
+    }
+
+    private fun isFlashlightOffCommand(lower: String): Boolean {
+        val light = "flashlight" in lower || "torch" in lower || "phone light" in lower || "phone torch" in lower
+        val off = "turn off" in lower || "switch off" in lower || "light off" in lower || lower.endsWith(" off")
+        return light && off
     }
 
     private fun isWhatsAppMessageCommand(lower: String): Boolean =
