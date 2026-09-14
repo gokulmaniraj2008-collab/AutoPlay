@@ -9,6 +9,7 @@ export type Schedule = {
   id: string;
   name: string;
   time: string;
+  scheduled_date?: string | null;
   playlist_url: string;
   enabled: boolean;
   timezone: string;
