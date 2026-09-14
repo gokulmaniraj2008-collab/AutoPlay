@@ -1,10 +1,13 @@
 package com.gokul.autoplay
 
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.app.Service
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.PixelFormat
 import android.graphics.drawable.GradientDrawable
+import android.os.Build
 import android.os.IBinder
 import android.provider.Settings
 import android.view.Gravity
@@ -12,15 +15,18 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
 import android.widget.TextView
+import androidx.core.app.NotificationCompat
 import kotlin.math.roundToInt
 
-/** Small, user-visible chatbot bubble shown while AI Mode is enabled. */
+/** Small, user-visible chatbot bubble shown while the user has enabled AI Mode. */
 class AiModeOverlayService : Service() {
     private var windowManager: WindowManager? = null
     private var bubble: TextView? = null
 
     override fun onCreate() {
         super.onCreate()
+        startAiModeForegroundNotification()
+
         if (!Settings.canDrawOverlays(this)) {
             stopSelf()
             return
@@ -61,6 +67,25 @@ class AiModeOverlayService : Service() {
         }
 
         windowManager?.addView(bubble, params)
+    }
+
+    private fun startAiModeForegroundNotification() {
+        val channelId = "ai_mode"
+        val manager = getSystemService(NotificationManager::class.java)
+        if (Build.VERSION.SDK_INT >= 26) {
+            manager.createNotificationChannel(
+                NotificationChannel(channelId, "AutoPlay AI Mode", NotificationManager.IMPORTANCE_LOW).apply {
+                    description = "Keeps the user-enabled AutoPlay AI Mode bubble available over other apps."
+                }
+            )
+        }
+        val notification = NotificationCompat.Builder(this, channelId)
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setContentTitle("AutoPlay AI Mode")
+            .setContentText("The floating AutoPlay chatbot is active.")
+            .setOngoing(true)
+            .build()
+        startForeground(1001, notification)
     }
 
     override fun onDestroy() {
