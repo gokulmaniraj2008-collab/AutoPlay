@@ -5,6 +5,25 @@ import { supabase, Schedule } from '../../lib/supabase';
 
 const EMPTY = { name: 'Tamil playlist', time: '15:00', playlist_url: '', enabled: true };
 
+function formatTime(value: string) {
+  const match = value.match(/^(\d{1,2}):(\d{2})/);
+  if (!match) return value;
+  const hour = Number(match[1]);
+  const minute = match[2];
+  const suffix = hour >= 12 ? 'PM' : 'AM';
+  const displayHour = hour % 12 || 12;
+  return `${displayHour}:${minute} ${suffix}`;
+}
+
+function isSpotifyPlaylistUrl(value: string) {
+  try {
+    const url = new URL(value);
+    return url.hostname === 'open.spotify.com' && url.pathname.startsWith('/playlist/');
+  } catch {
+    return false;
+  }
+}
+
 export default function SchedulesPage() {
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [form, setForm] = useState(EMPTY);
@@ -24,6 +43,10 @@ export default function SchedulesPage() {
   async function addSchedule(event: FormEvent) {
     event.preventDefault();
     if (!supabase) return setMessage('Missing Supabase environment variables.');
+    if (!isSpotifyPlaylistUrl(form.playlist_url)) {
+      setMessage('Please enter a valid Spotify playlist URL (open.spotify.com/playlist/...).');
+      return;
+    }
     setSaving(true); setMessage('');
     const { error } = await supabase.from('schedules').insert({ ...form, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone });
     if (error) setMessage(error.message); else { setForm(EMPTY); setMessage('Schedule synced to Supabase.'); await load(); }
@@ -63,7 +86,7 @@ export default function SchedulesPage() {
           <div className="section-title"><div><h2>Your schedules</h2><p>Synced from Supabase</p></div><span className="pill">{schedules.length}</span></div>
           {loading ? <p>Loading…</p> : schedules.length === 0 ? <div className="empty">No schedules yet. Add your first automation.</div> : <div className="schedule-list">{schedules.map(item => (
             <article className="schedule" key={item.id}>
-              <div><strong>{item.time}</strong><h3>{item.name}</h3><a href={item.playlist_url} target="_blank" rel="noreferrer">Open playlist</a></div>
+              <div><strong>{formatTime(item.time)}</strong><h3>{item.name}</h3><a href={item.playlist_url} target="_blank" rel="noreferrer">Open playlist</a></div>
               <div className="actions"><button className="secondary" onClick={() => toggle(item.id, item.enabled)}>{item.enabled ? 'Enabled' : 'Disabled'}</button><button className="danger" onClick={() => remove(item.id)}>Delete</button></div>
             </article>
           ))}</div>}
