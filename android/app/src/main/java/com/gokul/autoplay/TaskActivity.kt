@@ -76,10 +76,10 @@ class TaskActivity : ComponentActivity() {
         }
     }
 
-    override fun onNewIntent(intent: Intent?) {
+    override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        if (intent?.getBooleanExtra(EXTRA_START_VOICE, false) == true) {
+        if (intent.getBooleanExtra(EXTRA_START_VOICE, false)) {
             window.decorView.postDelayed({ requestVoiceCommand() }, 200)
         }
     }
@@ -172,7 +172,6 @@ class TaskActivity : ComponentActivity() {
     }
 
     private fun requestCallPermission() { callPermission.launch(Manifest.permission.CALL_PHONE) }
-
     private fun requestCameraPermission() { cameraPermission.launch(Manifest.permission.CAMERA) }
 
     private fun openAccessibilitySettings() {
@@ -203,30 +202,20 @@ class TaskActivity : ComponentActivity() {
         MaterialTheme {
             Surface(Modifier.fillMaxSize()) {
                 Column(
-                    Modifier
-                        .fillMaxSize()
-                        .statusBarsPadding()
-                        .verticalScroll(rememberScrollState())
-                        .padding(20.dp),
+                    Modifier.fillMaxSize().statusBarsPadding().verticalScroll(rememberScrollState()).padding(20.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
                     Text("AutoPlay", style = MaterialTheme.typography.headlineLarge)
                     Text("Your AI phone automation hub", style = MaterialTheme.typography.titleMedium)
                     Text("Give one command. AutoPlay understands it, runs it now, or schedules it for later.")
-
                     Card(Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                             Text("Hey Tommy", style = MaterialTheme.typography.titleLarge)
                             Text("Keep a small chatbot bubble visible while you use other apps. Tap the bubble to start voice input immediately.")
-                            Button(onClick = { showAiModeDialog = true }, modifier = Modifier.fillMaxWidth()) {
-                                Text("Activate Hey Tommy")
-                            }
-                            OutlinedButton(onClick = { disableAiMode() }, modifier = Modifier.fillMaxWidth()) {
-                                Text("Turn off Hey Tommy")
-                            }
+                            Button(onClick = { showAiModeDialog = true }, modifier = Modifier.fillMaxWidth()) { Text("Activate Hey Tommy") }
+                            OutlinedButton(onClick = { disableAiMode() }, modifier = Modifier.fillMaxWidth()) { Text("Turn off Hey Tommy") }
                         }
                     }
-
                     Card(Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                             Text("AI Phone Task", style = MaterialTheme.typography.titleLarge)
@@ -235,7 +224,6 @@ class TaskActivity : ComponentActivity() {
                             Button(onClick = { requestVoiceCommand() }, modifier = Modifier.fillMaxWidth(), enabled = !listening) { Text(if (listening) "Listening…" else "🎙 Speak Task") }
                         }
                     }
-
                     Card(Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                             Text("Phone Access", style = MaterialTheme.typography.titleLarge)
@@ -246,7 +234,6 @@ class TaskActivity : ComponentActivity() {
                             OutlinedButton(onClick = { requestExactAlarmPermission() }, modifier = Modifier.fillMaxWidth()) { Text("Allow exact-time automation") }
                         }
                     }
-
                     Card(Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                             Text("Examples", style = MaterialTheme.typography.titleLarge)
@@ -259,7 +246,6 @@ class TaskActivity : ComponentActivity() {
                             Text("• Call +919876543210")
                         }
                     }
-
                     Card(Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text("Status", style = MaterialTheme.typography.titleLarge)
@@ -269,7 +255,6 @@ class TaskActivity : ComponentActivity() {
                             Text("Updated ${SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date())}", style = MaterialTheme.typography.labelSmall)
                         }
                     }
-
                     Card(Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                             Text("Existing AutoPlay", style = MaterialTheme.typography.titleLarge)
@@ -279,7 +264,6 @@ class TaskActivity : ComponentActivity() {
                     }
                 }
             }
-
             if (showAiModeDialog) {
                 AlertDialog(
                     onDismissRequest = { showAiModeDialog = false },
