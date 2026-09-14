@@ -128,7 +128,7 @@ private fun AutoPlayApp(
                     NavigationBar {
                         NavigationBarItem(page == 0, { page = 0 }, icon = { Text("⌂") }, label = { Text("Home") })
                         NavigationBarItem(page == 1, { page = 1 }, icon = { Text("⚡") }, label = { Text("Pages") })
-                        NavigationBarItem(page == 5, { page = 5 }, icon = { Text("T") }, label = { Text("Tommy") })
+                        NavigationBarItem(page == 7, { page = 7 }, icon = { Text("💬") }, label = { Text("Chat") })
                     }
                 }
             }) { padding ->
@@ -141,6 +141,7 @@ private fun AutoPlayApp(
                         4 -> BackgroundSearchPage(tommyEnabled, { if (it) onStart() else onStop() })
                         5 -> VoiceAssistantPage(tommyEnabled, { if (it) onStart() else onStop() })
                         6 -> FloatingAssistantPage()
+                        7 -> TommyChatPage()
                     }
                 }
             }
@@ -189,11 +190,11 @@ private fun HomePage(onPages: () -> Unit, onTommy: () -> Unit) {
             Column(Modifier.padding(20.dp)) {
                 Text("READY TO PLAY", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(8.dp))
-                Text("Six app pages", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                Text("Commands, automation, background mode, voice and floating Tommy.")
+                Text("Seven app pages", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Text("Commands, automation, background mode, voice, floating Tommy and chat.")
             }
         }
-        Button(onClick = onPages, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) { Text("Open Pages 2–6") }
+        Button(onClick = onPages, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) { Text("Open Pages 2–7") }
         OutlinedButton(onClick = onTommy, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) { Text("Start Tommy") }
     }
 }
@@ -205,10 +206,11 @@ private fun PageIndex(onSelect: (Int) -> Unit) {
         Triple(3, "Automations", "Automation controls and routines"),
         Triple(4, "Background Search", "Keep Tommy available over other apps"),
         Triple(5, "Hey Tommy", "Wake phrase and voice commands"),
-        Triple(6, "Floating Assistant", "Draggable floating Tommy bubble")
+        Triple(6, "Floating Assistant", "Draggable floating Tommy bubble"),
+        Triple(7, "Tommy Chat", "Type a message and execute app commands")
     )
     Column(Modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("Pages 2–6", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+        Text("Pages 2–7", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
         Text("Direct access to every page.", color = MaterialTheme.colorScheme.onSurfaceVariant)
         pages.forEach { (number, title, description) ->
             Card(onClick = { onSelect(number) }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp)) {
