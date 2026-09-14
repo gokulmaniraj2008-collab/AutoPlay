@@ -3,7 +3,6 @@ package com.gokul.autoplay
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -24,22 +23,24 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.graphics.Color
 
 private data class TommyMessage(val fromTommy: Boolean, val text: String)
 
 @Composable
 fun TommyChatPage() {
+    val context = LocalContext.current
     val messages = remember {
         mutableStateListOf(
             TommyMessage(true, "Hi! I'm Tommy. Try: Open Instagram or Open YouTube.")
@@ -64,9 +65,7 @@ fun TommyChatPage() {
             modifier = Modifier.weight(1f).fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            items(messages) { message ->
-                ChatBubble(message)
-            }
+            items(messages) { message -> ChatBubble(message) }
         }
 
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
@@ -84,7 +83,7 @@ fun TommyChatPage() {
                     val command = input.trim()
                     if (command.isNotEmpty()) {
                         messages.add(TommyMessage(false, command))
-                        messages.add(TommyMessage(true, executeTommyChatCommand(command)))
+                        messages.add(TommyMessage(true, executeTommyChatCommand(context, command)))
                         input = ""
                     }
                 },
@@ -108,31 +107,28 @@ private fun ChatBubble(message: TommyMessage) {
                 containerColor = if (message.fromTommy) Color(0xFFEFF5FF) else MaterialTheme.colorScheme.primaryContainer
             )
         ) {
-            Text(
-                text = message.text,
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 11.dp)
-            )
+            Text(message.text, modifier = Modifier.padding(horizontal = 14.dp, vertical = 11.dp))
         }
     }
 }
 
-private fun executeTommyChatCommand(rawCommand: String): String {
+private fun executeTommyChatCommand(context: Context, rawCommand: String): String {
     val command = rawCommand.lowercase().replace(Regex("[^a-z0-9 ]"), " ").replace(Regex("\\s+"), " ").trim()
     return when {
         command.contains("instagram") -> {
-            launchApp("com.instagram.android", "https://www.instagram.com", "Instagram")
+            launchApp(context, "com.instagram.android", "https://www.instagram.com")
             "OK, opening Instagram."
         }
         command.contains("youtube") -> {
-            launchApp("com.google.android.youtube", "https://www.youtube.com", "YouTube")
+            launchApp(context, "com.google.android.youtube", "https://www.youtube.com")
             "OK, opening YouTube."
         }
         command.contains("google") -> {
-            launchApp("com.google.android.googlequicksearchbox", "https://www.google.com", "Google")
+            launchApp(context, "com.google.android.googlequicksearchbox", "https://www.google.com")
             "OK, opening Google."
         }
         command.contains("whatsapp") -> {
-            launchApp("com.whatsapp", "https://web.whatsapp.com", "WhatsApp")
+            launchApp(context, "com.whatsapp", "https://www.whatsapp.com")
             "OK, opening WhatsApp."
         }
         command == "hi" || command == "hello" || command.contains("hello tommy") -> "OK, I'm here."
@@ -141,6 +137,18 @@ private fun executeTommyChatCommand(rawCommand: String): String {
     }
 }
 
-private fun launchApp(packageName: String, fallbackUrl: String, appName: String) {
-    // Chat commands need a Context. The actual launch is handled by the activity below.
+private fun launchApp(context: Context, packageName: String, fallbackUrl: String) {
+    val launchIntent = context.packageManager.getLaunchIntentForPackage(packageName)
+    try {
+        if (launchIntent != null) {
+            launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            context.startActivity(launchIntent)
+        } else {
+            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(fallbackUrl)).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            })
+        }
+    } catch (_: Exception) {
+        // The chat still returns a response; Android will simply remain on AutoPlay if the target cannot open.
+    }
 }
