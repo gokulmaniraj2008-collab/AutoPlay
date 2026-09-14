@@ -3,6 +3,7 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
 
     <application
         android:theme="@android:style/Theme.Material.Light.NoActionBar"
@@ -17,6 +18,7 @@
         <activity android:name=".MainActivity" android:exported="false" />
         <receiver android:name=".PlaybackReceiver" android:exported="false" />
         <receiver android:name=".CloudPlaybackReceiver" android:exported="false" />
+        <receiver android:name=".ExactCloudPlaybackReceiver" android:exported="false" />
         <receiver
             android:name=".AutoPlayBootReceiver"
             android:exported="true">
