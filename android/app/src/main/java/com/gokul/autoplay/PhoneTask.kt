@@ -14,6 +14,8 @@ data class PhoneTask(
         CALL,
         OPEN_APP,
         OPEN_URL,
+        SEND_WHATSAPP,
+        EDIT_INSTAGRAM_BIO,
         UNKNOWN
     }
 }
