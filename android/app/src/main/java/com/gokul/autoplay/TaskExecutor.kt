@@ -5,6 +5,8 @@ import android.accessibilityservice.AccessibilityServiceInfo
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.hardware.camera2.CameraCharacteristics
+import android.hardware.camera2.CameraManager
 import android.net.Uri
 import android.text.TextUtils
 import androidx.core.content.ContextCompat
@@ -19,7 +21,33 @@ object TaskExecutor {
         PhoneTask.Action.OPEN_URL -> openUrl(context, task.target)
         PhoneTask.Action.SEND_WHATSAPP -> runWhatsAppMessage(context, task.target)
         PhoneTask.Action.EDIT_INSTAGRAM_BIO -> runInstagramBio(context, task.target)
+        PhoneTask.Action.FLASHLIGHT_ON -> setFlashlight(context, true)
+        PhoneTask.Action.FLASHLIGHT_OFF -> setFlashlight(context, false)
         PhoneTask.Action.UNKNOWN -> Result(false, "Unsupported task")
+    }
+
+    private fun setFlashlight(context: Context, enabled: Boolean): Result {
+        if (!context.packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_FLASH)) {
+            return Result(false, "This phone does not report a camera flash/torch.")
+        }
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+            return Result(false, "Camera permission is required once before AutoPlay can control the flashlight.")
+        }
+
+        val cameraManager = context.getSystemService(Context.CAMERA_SERVICE) as CameraManager
+        val cameraId = runCatching {
+            cameraManager.cameraIdList.firstOrNull { id ->
+                cameraManager.getCameraCharacteristics(id)
+                    .get(CameraCharacteristics.FLASH_INFO_AVAILABLE) == true
+            }
+        }.getOrNull() ?: return Result(false, "AutoPlay could not access a flashlight camera.")
+
+        return runCatching {
+            cameraManager.setTorchMode(cameraId, enabled)
+            Result(true, if (enabled) "Phone flashlight turned on." else "Phone flashlight turned off.")
+        }.getOrElse {
+            Result(false, "Android could not change the flashlight: ${it.message ?: "unknown error"}")
+        }
     }
 
     private fun openSpotifyTarget(context: Context): Result {
