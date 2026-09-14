@@ -7,6 +7,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.provider.OpenableColumns
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -15,7 +16,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -29,11 +33,28 @@ class CloudMainActivity : ComponentActivity() {
     private var status by mutableStateOf("Cloud schedules not synced")
     private var scheduleCount by mutableStateOf(0)
     private var exactAlarmReady by mutableStateOf(false)
-    private var spotifyReady by mutableStateOf(false)
+    private var schedules by mutableStateOf<List<CloudScheduleStore.Schedule>>(emptyList())
+    private var pendingScheduleId: String? = null
 
     private val notificationPermission = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { }
+
+    private val audioPicker = registerForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        val scheduleId = pendingScheduleId
+        pendingScheduleId = null
+        if (uri == null || scheduleId == null) return@registerForActivityResult
+        runCatching {
+            contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        val name = displayName(uri)
+        LocalTrackStore.put(this, scheduleId, uri, name)
+        schedules = CloudScheduleStore.loadAll(this)
+        schedules.firstOrNull { it.id == scheduleId }?.let { ExactCloudAlarmScheduler.schedule(this, it) }
+        status = "Music selected: $name"
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -57,23 +78,16 @@ class CloudMainActivity : ComponentActivity() {
         }
     }
 
-    private fun connectSpotify() {
-        if (SpotifyConfig.clientId.isBlank()) {
-            status = "Spotify Client ID is not configured in the Android build."
-            return
+    private fun chooseMusic(scheduleId: String) {
+        pendingScheduleId = scheduleId
+        audioPicker.launch(arrayOf("audio/*"))
+    }
+
+    private fun displayName(uri: Uri): String {
+        contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+            if (cursor.moveToFirst()) return cursor.getString(0)
         }
-        status = "Connecting to Spotify…"
-        SpotifyPlayback.connectForSetup(this) { result ->
-            runOnUiThread {
-                result.onSuccess {
-                    spotifyReady = true
-                    status = "Spotify connected. Scheduled play() is ready."
-                }.onFailure { error ->
-                    spotifyReady = false
-                    status = "Spotify connection failed: ${error.message ?: "unknown error"}"
-                }
-            }
-        }
+        return uri.lastPathSegment ?: "Local music"
     }
 
     private fun syncCloud() {
@@ -81,11 +95,13 @@ class CloudMainActivity : ComponentActivity() {
         CloudScheduleSync.sync(this) { result ->
             runOnUiThread {
                 result.onSuccess { count ->
+                    schedules = CloudScheduleStore.loadAll(this)
                     scheduleCount = count
                     ExactCloudAlarmScheduler.sync(this)
-                    status = "Synced $count schedule(s)."
+                    status = "Synced $count schedule(s). Choose music for each schedule."
                 }.onFailure { error ->
-                    scheduleCount = CloudScheduleStore.loadAll(this).size
+                    schedules = CloudScheduleStore.loadAll(this)
+                    scheduleCount = schedules.size
                     status = "Sync failed: ${error.message ?: "unknown error"}"
                 }
             }
@@ -96,28 +112,45 @@ class CloudMainActivity : ComponentActivity() {
     private fun Home() {
         MaterialTheme {
             Surface(modifier = Modifier.fillMaxSize()) {
-                Column(
-                    modifier = Modifier.padding(24.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize().padding(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Text("AutoPlay", style = MaterialTheme.typography.headlineLarge)
-                    Text("Cloud-controlled Spotify scheduling")
-                    Text("Schedules on device: $scheduleCount")
-                    Text(if (exactAlarmReady) "✓ Precise alarms enabled" else "⚠ Precise alarms permission required")
-                    Text(if (spotifyReady) "✓ Spotify App Remote connected" else "⚠ Spotify not connected")
-                    Text(status, style = MaterialTheme.typography.bodyMedium)
-                    if (!exactAlarmReady) {
-                        Button(onClick = { requestExactAlarmPermission() }, modifier = Modifier.fillMaxWidth()) {
-                            Text("Allow precise schedule alarms")
+                    item {
+                        Text("AutoPlay", style = MaterialTheme.typography.headlineLarge)
+                        Text("₹0 scheduled music player — plays audio stored on this phone.")
+                        Text("Schedules: $scheduleCount")
+                        Text(if (exactAlarmReady) "✓ Precise alarms enabled" else "⚠ Allow precise alarms for exact times")
+                        Text(status, style = MaterialTheme.typography.bodyMedium)
+                        if (!exactAlarmReady) {
+                            Button(onClick = { requestExactAlarmPermission() }, modifier = Modifier.fillMaxWidth()) {
+                                Text("Allow precise schedule alarms")
+                            }
+                        }
+                        Button(onClick = { syncCloud() }, modifier = Modifier.fillMaxWidth()) {
+                            Text("Sync from Supabase")
                         }
                     }
-                    Button(onClick = { connectSpotify() }, modifier = Modifier.fillMaxWidth()) {
-                        Text(if (spotifyReady) "Reconnect Spotify" else "Connect Spotify")
+                    items(schedules, key = { it.id }) { schedule ->
+                        val track = LocalTrackStore.get(this@CloudMainActivity, schedule.id)
+                        Card(modifier = Modifier.fillMaxWidth()) {
+                            Column(
+                                modifier = Modifier.padding(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Text(schedule.name, style = MaterialTheme.typography.titleLarge)
+                                Text("Time: ${schedule.time.take(5)}")
+                                Text(if (schedule.enabled) "Enabled" else "Disabled")
+                                Text(track?.name ?: "No local music selected")
+                                Button(
+                                    onClick = { chooseMusic(schedule.id) },
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text(if (track == null) "Choose music" else "Change music")
+                                }
+                            }
+                        }
                     }
-                    Button(onClick = { syncCloud() }, modifier = Modifier.fillMaxWidth()) {
-                        Text("Sync from Supabase")
-                    }
-                    Text("Connect Spotify once. At the scheduled time AutoPlay calls Spotify playerApi.play() for the saved playlist.")
                 }
             }
         }
