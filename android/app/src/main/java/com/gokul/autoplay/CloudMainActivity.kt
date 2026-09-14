@@ -2,6 +2,7 @@ package com.gokul.autoplay
 
 import android.Manifest
 import android.app.AlarmManager
+import android.app.DatePickerDialog
 import android.app.TimePickerDialog
 import android.content.Intent
 import android.net.Uri
@@ -48,6 +49,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
+import java.time.LocalDate
 
 class CloudMainActivity : ComponentActivity() {
     private var status by mutableStateOf("Ready")
@@ -94,17 +96,17 @@ class CloudMainActivity : ComponentActivity() {
         }}
     }
 
-    private fun createSchedule(name: String, time: String) {
-        CloudScheduleSync.create(this, name, time, false, java.util.TimeZone.getDefault().id) { result -> runOnUiThread {
-            result.onSuccess { syncCloud(); status = "Schedule created. Choose music to finish setup." }
+    private fun createSchedule(name: String, date: String, time: String) {
+        CloudScheduleSync.create(this, name, date, time, false, java.util.TimeZone.getDefault().id) { result -> runOnUiThread {
+            result.onSuccess { syncCloud(); status = "Schedule created for $date at $time. Choose music to finish setup." }
                 .onFailure { status = "Could not create schedule: ${it.message ?: "unknown error"}" }
         }}
     }
 
-    private fun updateSchedule(schedule: CloudScheduleStore.Schedule, name: String, time: String, enabled: Boolean) {
-        CloudScheduleSync.update(this, schedule.id, name, time, enabled, schedule.timezone) { result -> runOnUiThread {
+    private fun updateSchedule(schedule: CloudScheduleStore.Schedule, name: String, date: String, time: String, enabled: Boolean) {
+        CloudScheduleSync.update(this, schedule.id, name, date, time, enabled, schedule.timezone) { result -> runOnUiThread {
             result.onSuccess {
-                val updated = schedule.copy(name = name, time = time, enabled = enabled)
+                val updated = schedule.copy(name = name, scheduledDate = date, time = time, enabled = enabled)
                 CloudScheduleStore.saveAll(this, CloudScheduleStore.loadAll(this).map { if (it.id == schedule.id) updated else it })
                 if (enabled && LocalTrackStore.get(this, schedule.id) != null) ExactCloudAlarmScheduler.schedule(this, updated) else ExactCloudAlarmScheduler.cancel(this, schedule.id)
                 schedules = CloudScheduleStore.loadAll(this); status = "Schedule updated."
@@ -140,7 +142,7 @@ class CloudMainActivity : ComponentActivity() {
 
     @Composable private fun SplashScreen() { Surface(Modifier.fillMaxSize()) { Column(Modifier.fillMaxSize().padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) { BrandMark(104); Spacer(Modifier.height(22.dp)); Text("AutoPlay", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold); Spacer(Modifier.height(6.dp)); Text("Your music. Your time.") } } }
 
-    @Composable private fun GetStartedScreen(onStarted: () -> Unit) { Surface(Modifier.fillMaxSize()) { Column(Modifier.fillMaxSize().padding(28.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) { BrandMark(112); Spacer(Modifier.height(28.dp)); Text("Welcome to AutoPlay", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold); Spacer(Modifier.height(10.dp)); Text("Create schedules on your phone or website, then let AutoPlay play your local music automatically."); Spacer(Modifier.height(24.dp)); Card(Modifier.fillMaxWidth(), RoundedCornerShape(20.dp)) { Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) { Text("Simple & ₹0", fontWeight = FontWeight.Bold); Text("• Shared CRUD between website and app"); Text("• Music stored on your Android phone"); Text("• No Spotify subscription required") } }; Spacer(Modifier.height(28.dp)); Button(onStarted, Modifier.fillMaxWidth().height(54.dp)) { Text("Get Started", fontWeight = FontWeight.Bold) } } } }
+    @Composable private fun GetStartedScreen(onStarted: () -> Unit) { Surface(Modifier.fillMaxSize()) { Column(Modifier.fillMaxSize().padding(28.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) { BrandMark(112); Spacer(Modifier.height(28.dp)); Text("Welcome to AutoPlay", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold); Spacer(Modifier.height(10.dp)); Text("Create schedules on your phone or website, then let AutoPlay play your local music automatically."); Spacer(Modifier.height(24.dp)); Card(Modifier.fillMaxWidth(), RoundedCornerShape(20.dp)) { Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) { Text("Simple & ₹0", fontWeight = FontWeight.Bold); Text("• Shared CRUD between website and app"); Text("• Choose a date + exact time"); Text("• Music stored on your Android phone"); Text("• No Spotify subscription required") } }; Spacer(Modifier.height(28.dp)); Button(onStarted, Modifier.fillMaxWidth().height(54.dp)) { Text("Get Started", fontWeight = FontWeight.Bold) } } } }
 
     @Composable private fun Home() {
         var showCreate by remember { mutableStateOf(false) }
@@ -153,29 +155,34 @@ class CloudMainActivity : ComponentActivity() {
             items(schedules, key = { it.id }) { schedule ->
                 val track = LocalTrackStore.get(this@CloudMainActivity, schedule.id)
                 Card(Modifier.fillMaxWidth(), RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = if (schedule.enabled) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant)) { Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(schedule.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold); Text(schedule.time.take(5), style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold); Text(if (schedule.enabled) "ON • will play automatically" else "OFF • not scheduled") }; Switch(checked = schedule.enabled, onCheckedChange = { setScheduleEnabled(schedule, it) }, enabled = schedule.enabled || track != null) }
+                    Row(verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(schedule.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold); Text(schedule.scheduledDate ?: "Every day", style = MaterialTheme.typography.titleMedium); Text(schedule.time.take(5), style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold); Text(if (schedule.enabled) "ON • will play automatically" else "OFF • not scheduled") }; Switch(checked = schedule.enabled, onCheckedChange = { setScheduleEnabled(schedule, it) }, enabled = schedule.enabled || track != null) }
                     Divider(); Text("Music", fontWeight = FontWeight.Bold); Text(track?.name ?: "No local music selected"); Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) { Button({ chooseMusic(schedule.id) }, Modifier.weight(1f)) { Text(if (track == null) "Choose music" else "Change music") }; OutlinedButton({ editing = schedule }, Modifier.weight(1f)) { Text("Edit") } }
                     OutlinedButton({ deleteSchedule(schedule) }, Modifier.fillMaxWidth()) { Text("Delete schedule") }
                 } }
             }
-            item { Spacer(Modifier.height(8.dp)); Text("₹0 local playback • Music stays on your phone • Website + app share schedules") }
+            item { Spacer(Modifier.height(8.dp)); Text("₹0 local playback • Music stays on your phone • Website + app share date, time and schedules") }
         } } }
 
-        if (showCreate) ScheduleDialog(title = "Create schedule", initial = null, onDismiss = { showCreate = false }) { name, time, _ -> showCreate = false; createSchedule(name, time) }
-        editing?.let { schedule -> ScheduleDialog(title = "Edit schedule", initial = schedule, onDismiss = { editing = null }) { name, time, enabled -> editing = null; updateSchedule(schedule, name, time, enabled) } }
+        if (showCreate) ScheduleDialog(title = "Create schedule", initial = null, onDismiss = { showCreate = false }) { name, date, time, _ -> showCreate = false; createSchedule(name, date, time) }
+        editing?.let { schedule -> ScheduleDialog(title = "Edit schedule", initial = schedule, onDismiss = { editing = null }) { name, date, time, enabled -> editing = null; updateSchedule(schedule, name, date, time, enabled) } }
     }
 
-    @Composable private fun ScheduleDialog(title: String, initial: CloudScheduleStore.Schedule?, onDismiss: () -> Unit, onSave: (String, String, Boolean) -> Unit) {
+    @Composable private fun ScheduleDialog(title: String, initial: CloudScheduleStore.Schedule?, onDismiss: () -> Unit, onSave: (String, String, String, Boolean) -> Unit) {
         var name by remember(initial) { mutableStateOf(initial?.name ?: "New schedule") }
+        var date by remember(initial) { mutableStateOf(initial?.scheduledDate ?: LocalDate.now().toString()) }
         var time by remember(initial) { mutableStateOf(initial?.time?.take(5) ?: "07:00") }
         var enabled by remember(initial) { mutableStateOf(initial?.enabled ?: false) }
         AlertDialog(onDismissRequest = onDismiss, title = { Text(title) }, text = { Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             OutlinedTextField(name, { name = it }, label = { Text("Name") }, singleLine = true)
             OutlinedButton({
+                val parsed = runCatching { LocalDate.parse(date) }.getOrDefault(LocalDate.now())
+                DatePickerDialog(this@CloudMainActivity, { _, y, m, d -> date = "%04d-%02d-%02d".format(y, m + 1, d) }, parsed.year, parsed.monthValue - 1, parsed.dayOfMonth).show()
+            }, Modifier.fillMaxWidth()) { Text("Date: $date") }
+            OutlinedButton({
                 val parts = time.split(":"); val hour = parts.getOrNull(0)?.toIntOrNull() ?: 7; val minute = parts.getOrNull(1)?.toIntOrNull() ?: 0
                 TimePickerDialog(this@CloudMainActivity, { _, h, m -> time = "%02d:%02d".format(h, m) }, hour, minute, false).show()
             }, Modifier.fillMaxWidth()) { Text("Time: $time") }
             if (initial != null) Row(verticalAlignment = Alignment.CenterVertically) { Text("Enabled", Modifier.weight(1f)); Switch(enabled, { enabled = it }) }
-        } }, confirmButton = { Button(enabled = name.isNotBlank(), onClick = { onSave(name.trim(), time, enabled) }) { Text("Save") } }, dismissButton = { OutlinedButton(onDismiss) { Text("Cancel") } })
+        } }, confirmButton = { Button(enabled = name.isNotBlank(), onClick = { onSave(name.trim(), date, time, enabled) }) { Text("Save") } }, dismissButton = { OutlinedButton(onDismiss) { Text("Cancel") } })
     }
 }
