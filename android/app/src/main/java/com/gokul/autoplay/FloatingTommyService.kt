@@ -205,6 +205,9 @@ class FloatingTommyService : Service() {
             command.contains("youtube") -> {
                 openApp("com.google.android.youtube", "https://www.youtube.com")
             }
+            command.contains("google") -> {
+                openApp("com.google.android.googlequicksearchbox", "https://www.google.com")
+            }
             command.contains("whatsapp") -> {
                 openWhatsApp()
             }
