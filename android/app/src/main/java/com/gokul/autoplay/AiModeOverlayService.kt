@@ -34,8 +34,8 @@ class AiModeOverlayService : Service() {
 
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
         bubble = TextView(this).apply {
-            text = "T"
-            textSize = 14f
+            text = "✦"
+            textSize = 22f
             setTextColor(Color.WHITE)
             gravity = Gravity.CENTER
             background = GradientDrawable().apply {
@@ -44,10 +44,11 @@ class AiModeOverlayService : Service() {
                 setStroke(dp(2), Color.WHITE)
             }
             elevation = dp(8).toFloat()
-            contentDescription = "Hey Tommy chatbot"
+            contentDescription = "Hey Tommy chatbot. Tap to give a voice command."
             setOnClickListener {
                 val intent = Intent(this@AiModeOverlayService, TaskActivity::class.java).apply {
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                    putExtra(TaskActivity.EXTRA_START_VOICE, true)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
                 }
                 startActivity(intent)
             }
@@ -66,7 +67,8 @@ class AiModeOverlayService : Service() {
             y = dp(180)
         }
 
-        windowManager?.addView(bubble, params)
+        runCatching { windowManager?.addView(bubble, params) }
+            .onFailure { bubble = null; stopSelf() }
     }
 
     private fun startAiModeForegroundNotification() {
@@ -82,7 +84,7 @@ class AiModeOverlayService : Service() {
         val notification = NotificationCompat.Builder(this, channelId)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentTitle("Hey Tommy")
-            .setContentText("The floating AutoPlay chatbot is active.")
+            .setContentText("Tap the floating chatbot bubble to speak a command.")
             .setOngoing(true)
             .build()
         startForeground(1001, notification)
