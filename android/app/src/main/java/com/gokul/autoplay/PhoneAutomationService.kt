@@ -1,12 +1,10 @@
 package com.gokul.autoplay
 
 import android.accessibilityservice.AccessibilityService
-import android.content.Intent
 import android.graphics.Color
 import android.graphics.PixelFormat
 import android.os.Build
 import android.view.Gravity
-import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
 import android.widget.Button
@@ -17,21 +15,54 @@ import android.widget.Toast
 
 /** Accessibility-backed phone automation UI and command bubble. */
 class PhoneAutomationService : AccessibilityService() {
+    companion object {
+        @Volatile private var instance: PhoneAutomationService? = null
+        @Volatile private var pendingTask: String? = null
+
+        fun beginWhatsAppMessage(person: String, message: String) {
+            pendingTask = "WHATSAPP|$person|$message"
+        }
+
+        fun beginInstagramBio(bio: String) {
+            pendingTask = "INSTAGRAM_BIO|$bio"
+        }
+
+        fun clearPendingTask() {
+            pendingTask = null
+        }
+
+        fun showCommandBubble() {
+            instance?.showCommandBubbleInternal()
+        }
+
+        fun hideCommandBubble() {
+            instance?.hideBubble()
+        }
+    }
+
     private var windowManager: WindowManager? = null
     private var bubble: View? = null
     private var panel: View? = null
 
     override fun onServiceConnected() {
         super.onServiceConnected()
+        instance = this
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
     }
 
     override fun onAccessibilityEvent(event: android.view.accessibility.AccessibilityEvent?) = Unit
-    override fun onInterrupt() = Unit
+
+    override fun onInterrupt() {
+        clearPendingTask()
+    }
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 
     fun showCommandBubble() {
+        showCommandBubbleInternal()
+    }
+
+    private fun showCommandBubbleInternal() {
         if (bubble != null) return
         val wm = windowManager ?: return
         val view = TextView(this).apply {
@@ -53,8 +84,10 @@ class PhoneAutomationService : AccessibilityService() {
             x = dp(16)
             y = dp(180)
         }
-        wm.addView(view, params)
-        bubble = view
+        runCatching {
+            wm.addView(view, params)
+            bubble = view
+        }
     }
 
     private fun expandBubble() {
@@ -128,8 +161,10 @@ class PhoneAutomationService : AccessibilityService() {
             x = dp(12)
             y = dp(140)
         }
-        wm.addView(root, params)
-        panel = root
+        runCatching {
+            wm.addView(root, params)
+            panel = root
+        }
     }
 
     private fun collapseBubble() {
@@ -137,10 +172,16 @@ class PhoneAutomationService : AccessibilityService() {
         panel = null
     }
 
-    override fun onDestroy() {
+    private fun hideBubble() {
         collapseBubble()
         bubble?.let { runCatching { windowManager?.removeView(it) } }
         bubble = null
+    }
+
+    override fun onDestroy() {
+        hideBubble()
+        if (instance === this) instance = null
+        clearPendingTask()
         super.onDestroy()
     }
 }
