@@ -10,4 +10,5 @@ object TommyStatusEvents {
     const val LISTENING = "listening"
     const val HEARD = "heard"
     const val WORKING = "working"
+    const val MESSAGE = "message"
 }
