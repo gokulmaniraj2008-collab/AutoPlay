@@ -22,18 +22,21 @@ import android.provider.Settings
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
+import android.speech.tts.TextToSpeech
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.WindowManager
 import android.widget.TextView
 import android.widget.Toast
 import androidx.core.content.ContextCompat
+import java.util.Locale
 import kotlin.math.abs
 
 class FloatingTommyService : Service() {
     private var windowManager: WindowManager? = null
     private var bubble: TextView? = null
     private var speechRecognizer: SpeechRecognizer? = null
+    private var textToSpeech: TextToSpeech? = null
     private val mainHandler = Handler(Looper.getMainLooper())
     private var listening = false
     private var stopping = false
@@ -43,6 +46,12 @@ class FloatingTommyService : Service() {
         super.onCreate()
         createNotificationChannel()
         startForeground(NOTIFICATION_ID, buildNotification())
+
+        textToSpeech = TextToSpeech(this) { status ->
+            if (status == TextToSpeech.SUCCESS) {
+                textToSpeech?.language = Locale.ENGLISH
+            }
+        }
 
         if (!Settings.canDrawOverlays(this) || !hasMicrophonePermission()) {
             stopSelf()
@@ -212,13 +221,13 @@ class FloatingTommyService : Service() {
                 openRecentApps("Google")
             }
             command.contains("instagram") -> {
-                openApp("com.instagram.android", "https://www.instagram.com")
+                openApp("Instagram", "com.instagram.android", "https://www.instagram.com")
             }
             command.contains("youtube") -> {
-                openApp("com.google.android.youtube", "https://www.youtube.com")
+                openApp("YouTube", "com.google.android.youtube", "https://www.youtube.com")
             }
             command.contains("google") -> {
-                openApp("com.google.android.googlequicksearchbox", "https://www.google.com")
+                openApp("Google", "com.google.android.googlequicksearchbox", "https://www.google.com")
             }
             command.contains("whatsapp") -> {
                 openWhatsApp()
@@ -264,20 +273,22 @@ class FloatingTommyService : Service() {
         }
     }
 
-    private fun openApp(packageName: String, fallbackUrl: String) {
+    private fun openApp(appName: String, packageName: String, fallbackUrl: String) {
         val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
         if (launchIntent != null) {
+            toast("OK, opening $appName")
             launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             startActivity(launchIntent)
             return
         }
 
         try {
+            toast("OK, opening $appName in browser")
             startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(fallbackUrl)).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             })
         } catch (_: Exception) {
-            toast("App is not available")
+            toast("$appName is not available")
         }
     }
 
@@ -290,10 +301,12 @@ class FloatingTommyService : Service() {
         }
 
         try {
+            toast("OK, opening WhatsApp")
             startActivity(whatsappIntent)
         } catch (_: Exception) {
             val launchIntent = packageManager.getLaunchIntentForPackage("com.whatsapp")
             if (launchIntent != null) {
+                toast("OK, opening WhatsApp")
                 launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 startActivity(launchIntent)
             } else {
@@ -305,6 +318,7 @@ class FloatingTommyService : Service() {
     private fun toast(message: String) {
         mainHandler.post {
             Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+            textToSpeech?.speak(message, TextToSpeech.QUEUE_FLUSH, null, "tommy")
         }
     }
 
@@ -345,6 +359,9 @@ class FloatingTommyService : Service() {
         speechRecognizer?.destroy()
         speechRecognizer = null
         listening = false
+        textToSpeech?.stop()
+        textToSpeech?.shutdown()
+        textToSpeech = null
         bubble?.let { view ->
             if (view.isAttachedToWindow) windowManager?.removeView(view)
         }
