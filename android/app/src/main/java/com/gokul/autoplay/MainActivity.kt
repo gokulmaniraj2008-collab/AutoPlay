@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Arrangement
@@ -44,16 +45,17 @@ import androidx.core.content.ContextCompat
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent { AutoPlayPage1(onTommyClick = ::activateFloatingTommy) }
+        setContent { AutoPlayApp(onTommyClick = ::activateFloatingTommy) }
     }
 
     private fun activateFloatingTommy() {
         if (!Settings.canDrawOverlays(this)) {
-            val intent = Intent(
-                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                Uri.parse("package:$packageName")
+            startActivity(
+                Intent(
+                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                    Uri.parse("package:$packageName")
+                )
             )
-            startActivity(intent)
             return
         }
 
@@ -66,20 +68,22 @@ class MainActivity : ComponentActivity() {
             return
         }
 
-        val serviceIntent = Intent(this, FloatingTommyService::class.java)
-        ContextCompat.startForegroundService(this, serviceIntent)
+        ContextCompat.startForegroundService(this, Intent(this, FloatingTommyService::class.java))
+        Toast.makeText(this, "Tommy is ready", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun testAutoPlay() {
+        Toast.makeText(this, "AutoPlay test started", Toast.LENGTH_SHORT).show()
+        activateFloatingTommy()
     }
 }
 
 @Composable
-private fun AutoPlayPage1(onTommyClick: () -> Unit) {
+private fun AutoPlayApp(onTommyClick: () -> Unit) {
     var selectedTab by remember { mutableIntStateOf(0) }
 
     MaterialTheme {
-        Surface(
-            modifier = Modifier.fillMaxSize(),
-            color = MaterialTheme.colorScheme.background
-        ) {
+        Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
             Scaffold(
                 bottomBar = {
                     NavigationBar {
@@ -109,110 +113,109 @@ private fun AutoPlayPage1(onTommyClick: () -> Unit) {
                         .fillMaxSize()
                         .padding(innerPadding)
                 ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(horizontal = 20.dp, vertical = 40.dp),
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        Text(
-                            text = "AutoPlay",
-                            style = MaterialTheme.typography.headlineLarge,
-                            fontWeight = FontWeight.Bold
+                    when (selectedTab) {
+                        0 -> AutoPlayHome(
+                            onAddSchedule = { selectedTab = 3 },
+                            onTestNow = onTommyClick,
+                            onTommyClick = onTommyClick
                         )
-                        Text(
-                            text = "Your music. Your commands. Automatically.",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(24.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.primaryContainer
-                            )
-                        ) {
-                            Column(modifier = Modifier.padding(20.dp)) {
-                                Text(
-                                    text = "READY TO PLAY",
-                                    style = MaterialTheme.typography.labelLarge,
-                                    color = MaterialTheme.colorScheme.primary,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Text(
-                                    text = "No active automation",
-                                    style = MaterialTheme.typography.titleLarge,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    text = "Create a schedule or test AutoPlay instantly.",
-                                    style = MaterialTheme.typography.bodyMedium
-                                )
-                            }
-                        }
-
-                        Text(
-                            text = "Quick actions",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-
-                        Row(modifier = Modifier.fillMaxWidth()) {
-                            Button(
-                                onClick = { },
-                                modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(16.dp)
-                            ) {
-                                Text("Add schedule")
-                            }
-                            Spacer(modifier = Modifier.width(10.dp))
-                            OutlinedButton(
-                                onClick = { },
-                                modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(16.dp)
-                            ) {
-                                Text("Test now")
-                            }
-                        }
-
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(20.dp)
-                        ) {
-                            Column(modifier = Modifier.padding(18.dp)) {
-                                Text(
-                                    text = "Next automation",
-                                    style = MaterialTheme.typography.labelLarge,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Spacer(modifier = Modifier.height(6.dp))
-                                Text(
-                                    text = "No schedule yet",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                                Text(
-                                    text = "Add your first music automation to get started.",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-                    }
-
-                    FloatingActionButton(
-                        onClick = onTommyClick,
-                        modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .padding(bottom = 72.dp),
-                        shape = RoundedCornerShape(18.dp)
-                    ) {
-                        Text("Tommy", fontWeight = FontWeight.Bold)
+                        1 -> QuickCommandsPage()
+                        2 -> AutoPlaySettings()
+                        3 -> AutomationPage()
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AutoPlayHome(
+    onAddSchedule: () -> Unit,
+    onTestNow: () -> Unit,
+    onTommyClick: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 20.dp, vertical = 40.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Text("AutoPlay", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
+        Text(
+            "Your music. Your commands. Automatically.",
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(24.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+        ) {
+            Column(modifier = Modifier.padding(20.dp)) {
+                Text("READY TO PLAY", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(8.dp))
+                Text("No active automation", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(4.dp))
+                Text("Create a schedule or test AutoPlay instantly.")
+            }
+        }
+
+        Text("Quick actions", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+
+        Row(modifier = Modifier.fillMaxWidth()) {
+            Button(
+                onClick = onAddSchedule,
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(16.dp)
+            ) { Text("Add schedule") }
+            Spacer(Modifier.width(10.dp))
+            OutlinedButton(
+                onClick = onTestNow,
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(16.dp)
+            ) { Text("Test now") }
+        }
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(20.dp)
+        ) {
+            Column(modifier = Modifier.padding(18.dp)) {
+                Text("Next automation", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.height(6.dp))
+                Text("No schedule yet", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text("Add your first music automation to get started.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+
+        Spacer(Modifier.weight(1f))
+        Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+            FloatingActionButton(
+                onClick = onTommyClick,
+                shape = RoundedCornerShape(18.dp)
+            ) { Text("Tommy", fontWeight = FontWeight.Bold) }
+        }
+    }
+}
+
+@Composable
+private fun AutoPlaySettings() {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 20.dp, vertical = 28.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Text("Settings", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+        Text("Control Tommy permissions and app behavior.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+        Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(22.dp)) {
+            Column(modifier = Modifier.padding(18.dp)) {
+                Text("Tommy assistant", fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(6.dp))
+                Text("Tommy uses microphone access for Hey Tommy voice listening and overlay access for the floating bubble.")
             }
         }
     }
