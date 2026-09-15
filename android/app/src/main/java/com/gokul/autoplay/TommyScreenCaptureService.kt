@@ -17,6 +17,7 @@ import android.media.projection.MediaProjectionManager
 import android.os.Build
 import android.os.IBinder
 import android.util.DisplayMetrics
+import android.view.WindowManager
 import androidx.core.app.NotificationCompat
 
 /**
@@ -31,7 +32,7 @@ class TommyScreenCaptureService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val resultCode = intent?.getIntExtra(EXTRA_RESULT_CODE, -1) ?: -1
-        val permissionData = intent?.parcelableIntentExtra(EXTRA_DATA)
+        val permissionData = intent?.parcelableIntentExtra<Intent>(EXTRA_DATA)
         if (resultCode != RESULT_OK || permissionData == null) {
             stopSelf()
             return START_NOT_STICKY
@@ -58,10 +59,10 @@ class TommyScreenCaptureService : Service() {
             }
         }, null)
 
-        val metrics = DisplayMetrics().also { displayMetrics ->
-            @Suppress("DEPRECATION")
-            windowManager.defaultDisplay.getRealMetrics(displayMetrics)
-        }
+        val metrics = DisplayMetrics()
+        @Suppress("DEPRECATION")
+        (getSystemService(Context.WINDOW_SERVICE) as WindowManager).defaultDisplay.getRealMetrics(metrics)
+
         val width = metrics.widthPixels.coerceAtLeast(1)
         val height = metrics.heightPixels.coerceAtLeast(1)
         val density = metrics.densityDpi.coerceAtLeast(1)
@@ -170,7 +171,6 @@ class TommyScreenCaptureService : Service() {
         private const val NOTIFICATION_ID = 3107
         const val EXTRA_RESULT_CODE = "tommy_screen_result_code"
         const val EXTRA_DATA = "tommy_screen_permission_data"
-        const val ACTION_STOP = "com.gokul.autoplay.STOP_SCREEN_VISION"
 
         fun start(context: Context, resultCode: Int, permissionData: Intent) {
             val intent = Intent(context, TommyScreenCaptureService::class.java).apply {
