@@ -87,14 +87,60 @@ function AuthScreen() {
 }
 
 function TommyMenu({ open, close, recentChats, onOpenChat, onNewChat, onDeleteChat }) {
-  const [deleteChatId, setDeleteChatId] = useState(null); const longPressTimer = useRef(null);
-  const clearLongPress = () => { if (longPressTimer.current) { clearTimeout(longPressTimer.current); longPressTimer.current = null; } };
-  const startLongPress = (id) => { clearLongPress(); longPressTimer.current = setTimeout(() => { setDeleteChatId(id); longPressTimer.current = null; }, 550); };
-  const handleOpen = (id) => { clearLongPress(); if (deleteChatId === id) return; onOpenChat(id); };
-  const handleDelete = async (id) => { clearLongPress(); setDeleteChatId(null); await onDeleteChat(id); };
+  const [deleteChatId, setDeleteChatId] = useState(null);
+  const longPressTimer = useRef(null);
+
+  const clearLongPress = () => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  };
+
+  const startLongPress = (id) => {
+    clearLongPress();
+    longPressTimer.current = setTimeout(() => {
+      setDeleteChatId(id);
+      longPressTimer.current = null;
+    }, 550);
+  };
+
+  const handleOpen = (id) => {
+    clearLongPress();
+    if (deleteChatId === id) return;
+    onOpenChat(id);
+  };
+
+  const handleDelete = async (id) => {
+    clearLongPress();
+    setDeleteChatId(null);
+    await onDeleteChat(id);
+  };
+
   useEffect(() => () => clearLongPress(), []);
+  useEffect(() => { if (!open) setDeleteChatId(null); }, [open]);
+
   return (
-    <><div className={open ? 'menuOverlay open' : 'menuOverlay'} onClick={() => { setDeleteChatId(null); close(); }} /><aside className={open ? 'sideMenu open' : 'sideMenu'} aria-hidden={!open}><div className="sideTop"><div className="sideTitle"><div className="sideLogo">T</div><b>Tommy</b></div><button className="sideIcon" onClick={close} aria-label="Close menu"><X size={21}/></button></div><div className="sideSearch"><Search size={18}/><span>Search Tommy</span></div><div className="sideFeatures"><button><Sparkles size={22}/><span>Skills</span></button><button><Library size={22}/><span>Memory</span></button><button><Folder size={22}/><span>Projects</span></button><button><Clock3 size={22}/><span>Scheduled</span></button><button><Puzzle size={22}/><span>Plugins</span></button></div><div className="sideDivider" /><div className="sideRecentHeader"><span>Recent chats</span><button onClick={onNewChat} title="New chat"><Pencil size={18}/></button></div><div className="sideRecent">{recentChats.length ? recentChats.map((chat, i) => <div className={i === 0 ? 'recentChatRow active' : 'recentChatRow'} key={chat.id} onPointerDown={() => startLongPress(chat.id)} onPointerUp={clearLongPress} onPointerLeave={clearLongPress} onPointerCancel={clearLongPress} onContextMenu={(e) => e.preventDefault()} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleOpen(chat.id); } }}><span className="recentItem" onClick={() => handleOpen(chat.id)}>{chat.title}</span>{deleteChatId === chat.id && <button className="chatDeleteButton" onPointerDown={(e) => { e.stopPropagation(); clearLongPress(); }} onPointerUp={(e) => e.stopPropagation()} onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDelete(chat.id); }} title="Delete chat" aria-label={`Delete ${chat.title}`}>×</button>}</div>) : <div className="recentEmpty">No chats yet</div>}{recentChats.length > 0 && <button className="seeAll" onClick={close}>See all…</button>}</div><div className="sideBottom"><button className="newChat" onClick={onNewChat}><Plus size={21}/> <span>Chat</span></button><button className="tommyGo" onClick={close}>GO</button></div></aside></>
+    <>
+      <div className={open ? 'menuOverlay open' : 'menuOverlay'} onClick={() => { setDeleteChatId(null); close(); }} />
+      <aside className={open ? 'sideMenu open' : 'sideMenu'} aria-hidden={!open}>
+        <div className="sideTop"><div className="sideTitle"><div className="sideLogo">T</div><b>Tommy</b></div><button className="sideIcon" onClick={close} aria-label="Close menu"><X size={21}/></button></div>
+        <div className="sideSearch"><Search size={18}/><span>Search Tommy</span></div>
+        <div className="sideFeatures"><button><Sparkles size={22}/><span>Skills</span></button><button><Library size={22}/><span>Memory</span></button><button><Folder size={22}/><span>Projects</span></button><button><Clock3 size={22}/><span>Scheduled</span></button><button><Puzzle size={22}/><span>Plugins</span></button></div>
+        <div className="sideDivider" />
+        <div className="sideRecentHeader"><span>Recent chats</span><button onClick={onNewChat} title="New chat"><Pencil size={18}/></button></div>
+        <div className="sideRecent">
+          {recentChats.length ? recentChats.map((chat, i) => (
+            <div className={deleteChatId === chat.id ? 'recentChatRow deleting' : i === 0 ? 'recentChatRow active' : 'recentChatRow'} key={chat.id} onPointerDown={() => startLongPress(chat.id)} onPointerUp={clearLongPress} onPointerLeave={clearLongPress} onPointerCancel={clearLongPress} onContextMenu={(e) => e.preventDefault()} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleOpen(chat.id); } }}>
+              <span className="recentItem" onClick={() => handleOpen(chat.id)}>{chat.title}</span>
+              {deleteChatId === chat.id && <button className="chatDeleteButton" onPointerDown={(e) => { e.stopPropagation(); clearLongPress(); }} onPointerUp={(e) => e.stopPropagation()} onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDelete(chat.id); }} title="Delete chat" aria-label={`Delete ${chat.title}`}>×</button>}
+            </div>
+          )) : <div className="recentEmpty">No chats yet</div>}
+          {recentChats.length > 0 && <button className="seeAll" onClick={close}>See all…</button>}
+        </div>
+        <div className="sideBottom"><button className="newChat" onClick={onNewChat}><Plus size={21}/> <span>Chat</span></button><button className="tommyGo" onClick={close}>GO</button></div>
+      </aside>
+    </>
   );
 }
 
