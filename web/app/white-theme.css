@@ -1,1 +1,99 @@
-g
+/* Tommy full white theme — loaded after globals.css so the menu and app stay bright. */
+html, body { background: #ffffff; color: #111827; }
+.app { background: #ffffff; color: #111827; }
+header { background: #ffffff; border-bottom-color: #e5e7eb; }
+.menuButton, .logout { background: #ffffff; border-color: #e5e7eb; color: #111827; }
+.hero { background: #ffffff; }
+.composer { background: #ffffff; border-color: #dfe4eb; }
+.chat .msg.tommy div { background: #ffffff; border-color: #e5e7eb; }
+footer { background: #ffffff; border-top-color: #e5e7eb; }
+
+/* Full white Tommy drawer */
+.menuOverlay { background: rgba(15, 23, 42, .18); }
+.sideMenu {
+  background: #ffffff;
+  color: #111827;
+  border-right: 1px solid #e5e7eb;
+  box-shadow: 14px 0 40px rgba(15, 23, 42, .10);
+}
+.sideTop { color: #111827; }
+.sideTitle { color: #111827; }
+.sideLogo { background: #111827; color: #ffffff; }
+.sideIcon { color: #4b5563; }
+.sideIcon:hover { background: #f3f4f6; color: #111827; }
+.sideSearch {
+  background: #f7f8fa;
+  border-color: #e5e7eb;
+  color: #6b7280;
+}
+.sideFeatures button { color: #111827; }
+.sideFeatures button:hover { background: #f3f4f6; }
+.sideFeatures svg { color: #374151; }
+.sideDivider { background: #e5e7eb; }
+.sideRecentHeader { color: #6b7280; }
+.sideRecentHeader button { color: #6b7280; }
+.sideRecentHeader button:hover { background: #f3f4f6; color: #111827; }
+.recentChatRow {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-height: 46px;
+  border-radius: 9px;
+  overflow: hidden;
+}
+.recentChatRow.active { background: #eef2f7; }
+.recentChatRow:hover { background: #f3f4f6; }
+.recentItem {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: #111827;
+  text-align: left;
+  border-radius: 9px;
+  padding: 13px 44px 13px 10px;
+  font: inherit;
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+.recentItem:hover { background: transparent; }
+.recentItem.active { background: transparent; color: #111827; }
+.recentEmpty { color: #9ca3af; }
+.seeAll { color: #6b7280; }
+.seeAll:hover { color: #111827; }
+.sideBottom { background: #ffffff; }
+.tommyGo { background: #ffffff; border-color: #d1d5db; color: #e88920; box-shadow: inset 0 0 0 7px #ffffff; }
+
+/* Long-press delete control for each recent chat */
+.chatDeleteButton {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  transform: translateY(-50%);
+  width: 32px;
+  height: 32px;
+  border: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9px;
+  background: #fee2e2;
+  color: #dc2626;
+  cursor: pointer;
+  z-index: 2;
+}
+.chatDeleteButton:hover,
+.chatDeleteButton:focus-visible {
+  background: #fecaca;
+  color: #b91c1c;
+  outline: none;
+}
+
+@media (max-width: 600px) {
+  .sideMenu { width: 88vw; padding-top: 26px; }
+  .chatDeleteButton { width: 34px; height: 34px; right: 7px; }
+}
+
