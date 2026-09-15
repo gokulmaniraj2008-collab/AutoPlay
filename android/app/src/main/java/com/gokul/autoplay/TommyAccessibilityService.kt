@@ -107,39 +107,52 @@ class TommyAccessibilityService : AccessibilityService() {
     }
 
     /**
-     * Launch Instagram when needed, wait for its first window/content events,
-     * then locate the Reels tab through accessibility. If Instagram does not
-     * expose the tab as a node (which varies by version), use the stable
-     * bottom-navigation position as a final fallback. No Gemini/Vision call.
+     * Launch Instagram when needed, then asynchronously retry the Reels click.
+     * Never blocks the Accessibility main thread with Thread.sleep(), because
+     * blocking it can prevent Instagram accessibility events from arriving.
      */
     private fun openInstagramReelsReliably(): Boolean {
-        try {
-            if (!isInstagramForeground()) {
-                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.instagram.com/")).apply {
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                })
-                if (!waitForForegroundPackage(INSTAGRAM_PACKAGE, 5000L)) return false
+        if (!isInstagramForeground()) {
+            val launchIntent = packageManager.getLaunchIntentForPackage(INSTAGRAM_PACKAGE)
+            try {
+                if (launchIntent != null) {
+                    launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    startActivity(launchIntent)
+                } else {
+                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.instagram.com/")).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    })
+                }
+            } catch (_: Exception) {
+                return false
             }
-
-            // Give Instagram time to finish its first layout and expose nodes.
-            Thread.sleep(900L)
-
-            // Retry accessibility lookup because Instagram's Compose/custom UI
-            // can populate the accessibility tree a little after the window event.
-            repeat(6) {
-                if (!isInstagramForeground()) return false
-                if (findAndClickAny("Reels", "reels")) return true
-                if (findAndClickExactOrDescription("Reels", "reels")) return true
-                Thread.sleep(350L)
-            }
-
-            // Instagram normally places Reels in the bottom navigation.
-            // This fallback keeps the command working when the label is not
-            // exposed through AccessibilityNodeInfo.
-            return dispatchTapNearRightCenter(0.60f, 0.94f)
-        } catch (_: Exception) {
-            return false
         }
+
+        val handler = Handler(Looper.getMainLooper())
+        val deadline = System.currentTimeMillis() + 7000L
+
+        fun attempt() {
+            if (!isInstagramForeground()) {
+                if (System.currentTimeMillis() < deadline) handler.postDelayed({ attempt() }, 300L)
+                return
+            }
+
+            // Instagram may publish the accessibility tree shortly after the
+            // foreground event, so retry the semantic Reels label first.
+            if (findAndClickExactOrDescription("Reels", "reels")) return
+            if (findAndClickAny("Reels", "reels")) return
+
+            if (System.currentTimeMillis() < deadline) {
+                handler.postDelayed({ attempt() }, 300L)
+            } else {
+                // Five-tab Instagram layouts normally put Reels in the center.
+                // This is only the final fallback when the label is hidden.
+                dispatchTapNearRightCenter(0.50f, 0.94f)
+            }
+        }
+
+        handler.postDelayed({ attempt() }, 700L)
+        return true
     }
 
     private fun isInstagramForeground(): Boolean = rootInActiveWindow?.packageName?.toString() == INSTAGRAM_PACKAGE
@@ -264,7 +277,6 @@ class TommyAccessibilityService : AccessibilityService() {
         fun performTommyAction(action: String): Boolean = instance?.performTommyActionInternal(action) == true
         fun sendChatGPTMessage(message: String): Boolean = instance?.sendChatGPTMessageInternal(message) == true
 
-        /** One-shot screenshot -> Gemini target detection. No continuous screen recording. */
         fun locateScreenTarget(instruction: String, callback: (TommyVisionEngine.Target?, String?) -> Unit) {
             val service = instance
             if (service == null) {
@@ -274,7 +286,6 @@ class TommyAccessibilityService : AccessibilityService() {
             Handler(Looper.getMainLooper()).post { service.locateScreenTargetInternal(instruction, callback) }
         }
 
-        /** Vision-assisted tap with a confidence threshold. */
         fun locateAndTap(instruction: String, callback: (TommyVisionEngine.Target?, Boolean, String?) -> Unit) {
             locateScreenTarget(instruction) { target, error ->
                 if (target == null) {
