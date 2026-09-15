@@ -1,9 +1,10 @@
 package com.gokul.autoplay
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Bundle
-import android.webkit.ClientCertRequest
 import android.webkit.PermissionRequest
 import android.webkit.SslErrorHandler
 import android.webkit.WebChromeClient
@@ -23,6 +24,7 @@ class MainActivity : ComponentActivity() {
     private var pendingWebPermissionRequest: PermissionRequest? = null
     private var supabaseBridge: SupabaseTommyBridge? = null
     private var pageRetryUsed = false
+    private var browserFallbackUsed = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -33,14 +35,17 @@ class MainActivity : ComponentActivity() {
                 javaScriptEnabled = true
                 domStorageEnabled = true
                 databaseEnabled = true
-                cacheMode = WebSettings.LOAD_NO_CACHE
+                cacheMode = WebSettings.LOAD_DEFAULT
                 mediaPlaybackRequiresUserGesture = false
                 allowFileAccess = false
                 allowContentAccess = false
+                // Match the normal Chrome mobile user agent. This avoids Vercel/CDN
+                // treating Android WebView differently from the working browser page.
+                userAgentString = "Mozilla/5.0 (Linux; Android 16; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Mobile Safari/537.36"
             }
 
-            // Do not reuse a cached Vercel 404/deployment response.
-            clearCache(false)
+            clearCache(true)
+            clearHistory()
 
             webViewClient = object : WebViewClient() {
                 override fun onReceivedError(
@@ -49,11 +54,28 @@ class MainActivity : ComponentActivity() {
                     error: WebResourceError
                 ) {
                     super.onReceivedError(view, request, error)
-                    if (request.isForMainFrame && !pageRetryUsed) {
+                    if (!request.isForMainFrame) return
+
+                    if (!pageRetryUsed) {
                         pageRetryUsed = true
                         view.postDelayed({
-                            view.loadUrl(buildTommyUrl(retry = true))
-                        }, 500L)
+                            view.loadUrl(TOMMY_WEB_URL)
+                        }, 700L)
+                    } else if (!browserFallbackUsed) {
+                        browserFallbackUsed = true
+                        openTommyInBrowser()
+                    }
+                }
+
+                override fun onReceivedHttpError(
+                    view: WebView,
+                    request: WebResourceRequest,
+                    errorResponse: android.webkit.WebResourceResponse
+                ) {
+                    super.onReceivedHttpError(view, request, errorResponse)
+                    if (request.isForMainFrame && errorResponse.statusCode == 404 && !browserFallbackUsed) {
+                        browserFallbackUsed = true
+                        openTommyInBrowser()
                     }
                 }
 
@@ -62,7 +84,6 @@ class MainActivity : ComponentActivity() {
                     handler: SslErrorHandler,
                     error: android.net.http.SslError
                 ) {
-                    // Never bypass TLS validation.
                     handler.cancel()
                 }
             }
@@ -96,17 +117,17 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            loadUrl(buildTommyUrl(retry = false))
+            loadUrl(TOMMY_WEB_URL)
         }
 
         startTommyWebBridge()
         setContentView(webView)
     }
 
-    private fun buildTommyUrl(retry: Boolean): String {
-        val separator = if (TOMMY_WEB_URL.contains("?")) "&" else "?"
-        val attempt = if (retry) "2" else "1"
-        return "$TOMMY_WEB_URL${separator}android=1&attempt=$attempt&t=${System.currentTimeMillis()}"
+    private fun openTommyInBrowser() {
+        runCatching {
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(TOMMY_WEB_URL)))
+        }
     }
 
     private fun startTommyWebBridge() {
