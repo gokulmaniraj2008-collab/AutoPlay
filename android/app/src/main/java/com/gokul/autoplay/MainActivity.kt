@@ -1,17 +1,20 @@
 package com.gokul.autoplay
 
 import android.Manifest
+import android.app.Activity
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.media.projection.MediaProjectionManager
 import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -35,8 +38,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -45,6 +48,20 @@ import androidx.core.content.ContextCompat
 class MainActivity : ComponentActivity() {
     private var tommyStatus by mutableStateOf(TommyStatusEvents.OFF)
     private var tommyStatusText by mutableStateOf("Tommy is OFF")
+    private var screenVisionEnabled by mutableStateOf(false)
+
+    private val screenCaptureLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK && result.data != null) {
+            TommyScreenCaptureService.start(this, result.resultCode, result.data!!)
+            screenVisionEnabled = true
+            Toast.makeText(this, "Tommy screen vision is ON", Toast.LENGTH_SHORT).show()
+        } else {
+            screenVisionEnabled = false
+            Toast.makeText(this, "Screen capture permission was not granted", Toast.LENGTH_SHORT).show()
+        }
+    }
 
     private val tommyStatusReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -61,8 +78,11 @@ class MainActivity : ComponentActivity() {
             AutoPlayApp(
                 tommyStatus = tommyStatus,
                 tommyStatusText = tommyStatusText,
+                screenVisionEnabled = screenVisionEnabled,
                 onStart = ::activateFloatingTommy,
-                onStop = ::deactivateFloatingTommy
+                onStop = ::deactivateFloatingTommy,
+                onScreenVision = ::requestScreenVision,
+                onStopScreenVision = ::stopScreenVision
             )
         }
     }
@@ -101,6 +121,22 @@ class MainActivity : ComponentActivity() {
         Toast.makeText(this, "Tommy is off", Toast.LENGTH_SHORT).show()
     }
 
+    private fun requestScreenVision() {
+        val manager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+        screenCaptureLauncher.launch(manager.createScreenCaptureIntent())
+    }
+
+    private fun stopScreenVision() {
+        TommyScreenCaptureService.stop(this)
+        screenVisionEnabled = false
+        Toast.makeText(this, "Tommy screen vision is OFF", Toast.LENGTH_SHORT).show()
+    }
+
+    override fun onDestroy() {
+        if (screenVisionEnabled) TommyScreenCaptureService.stop(this)
+        super.onDestroy()
+    }
+
     private fun defaultTommyStatusText(status: String): String = when (status) {
         TommyStatusEvents.ON -> "Tommy is ON"
         TommyStatusEvents.LISTENING -> "Tommy is listening…"
@@ -114,8 +150,11 @@ class MainActivity : ComponentActivity() {
 private fun AutoPlayApp(
     tommyStatus: String,
     tommyStatusText: String,
+    screenVisionEnabled: Boolean,
     onStart: () -> Unit,
-    onStop: () -> Unit
+    onStop: () -> Unit,
+    onScreenVision: () -> Unit,
+    onStopScreenVision: () -> Unit
 ) {
     var page by remember { mutableIntStateOf(0) }
     val tommyEnabled = tommyStatus != TommyStatusEvents.OFF
@@ -134,7 +173,7 @@ private fun AutoPlayApp(
             }) { padding ->
                 Box(Modifier.fillMaxSize().padding(padding)) {
                     when (page) {
-                        0 -> HomePage({ page = 1 }, onStart)
+                        0 -> HomePage({ page = 1 }, onStart, screenVisionEnabled, onScreenVision, onStopScreenVision)
                         1 -> PageIndex { page = it }
                         2 -> QuickCommandsPage()
                         3 -> AutomationPage()
@@ -182,7 +221,13 @@ private fun TommyBottomStatus(status: String, text: String) {
 }
 
 @Composable
-private fun HomePage(onPages: () -> Unit, onTommy: () -> Unit) {
+private fun HomePage(
+    onPages: () -> Unit,
+    onTommy: () -> Unit,
+    screenVisionEnabled: Boolean,
+    onScreenVision: () -> Unit,
+    onStopScreenVision: () -> Unit
+) {
     Column(Modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Text("AutoPlay", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
         Text("Your music. Your commands. Automatically.", color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -196,6 +241,21 @@ private fun HomePage(onPages: () -> Unit, onTommy: () -> Unit) {
         }
         Button(onClick = onPages, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) { Text("Open Pages 2–7") }
         OutlinedButton(onClick = onTommy, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) { Text("Start Tommy") }
+        Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp)) {
+            Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("👀 SCREEN VISION", fontWeight = FontWeight.Bold)
+                Text(
+                    if (screenVisionEnabled) "Tommy is capturing the screen. Gemini Vision will use these frames in the next step."
+                    else "Let Tommy capture the current screen after you approve Android's screen-sharing permission.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                if (screenVisionEnabled) {
+                    OutlinedButton(onClick = onStopScreenVision, modifier = Modifier.fillMaxWidth()) { Text("Stop Screen Vision") }
+                } else {
+                    Button(onClick = onScreenVision, modifier = Modifier.fillMaxWidth()) { Text("Enable Screen Vision") }
+                }
+            }
+        }
     }
 }
 
