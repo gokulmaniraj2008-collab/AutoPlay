@@ -11,8 +11,6 @@ import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.PixelFormat
 import android.graphics.drawable.GradientDrawable
-import android.hardware.camera2.CameraCharacteristics
-import android.hardware.camera2.CameraManager
 import android.net.Uri
 import android.os.Build
 import android.os.Handler
@@ -26,8 +24,8 @@ import android.view.WindowManager
 import android.widget.TextView
 import android.widget.Toast
 import androidx.core.content.ContextCompat
+import com.gokul.autoplay.skills.TommySkillEngine
 import org.json.JSONObject
-import java.net.URLEncoder
 import java.util.Locale
 import kotlin.math.abs
 
@@ -38,12 +36,12 @@ class FloatingTommyService : Service(), TommyVoiceController.Listener {
     private val mainHandler = Handler(Looper.getMainLooper())
     private var stopping = false
     private var commandMode = false
-    private var flashlightOn = false
     private var supabaseBridge: SupabaseTommyBridge? = null
 
     override fun onCreate() {
         super.onCreate()
         isRunning = true
+        TommySkillEngine.initialize()
         createNotificationChannel()
         startForeground(NOTIFICATION_ID, buildNotification())
         textToSpeech = TextToSpeech(this) { status ->
@@ -156,86 +154,115 @@ class FloatingTommyService : Service(), TommyVoiceController.Listener {
         }
     }
 
+    /** All local voice commands now use the same skill engine as Chat. */
     private fun executeVoiceCommand(command: String) {
-        sendStatus(TommyStatusEvents.WORKING, "Tommy is working…")
-        when {
-            command.contains("light") && (command.contains("on") || command.contains("turn")) -> setFlashlight(true)
-            command.contains("light") && command.contains("off") -> setFlashlight(false)
-            command.contains("instagram") && command.contains("close") -> openRecentApps("Instagram")
-            command.contains("youtube") && command.contains("close") -> openRecentApps("YouTube")
-            command.contains("whatsapp") && command.contains("close") -> openRecentApps("WhatsApp")
-            command.contains("google") && command.contains("close") -> openRecentApps("Google")
-            command.contains("instagram") -> openApp("Instagram", "com.instagram.android", "https://www.instagram.com")
-            command.contains("youtube") -> openApp("YouTube", "com.google.android.youtube", "https://www.youtube.com")
-            command.contains("google") -> openApp("Google", "com.google.android.googlequicksearchbox", "https://www.google.com")
-            command.contains("whatsapp") -> openWhatsApp()
-            else -> toast("Tommy heard: $command")
-        }
+        executeSkillCommand(command)
     }
 
+    /**
+     * Web commands arrive through Supabase as JSON produced by the Gemini web route.
+     * Convert that structured payload back into the canonical natural-language command
+     * and send it through the exact same skill engine used by Android Chat/voice.
+     */
     private fun executeRemoteCommand(commandRow: JSONObject): String {
         val raw = commandRow.optString("command")
-        val ai = try { JSONObject(raw) } catch (_: Exception) { JSONObject().put("action", "none").put("reply", "I received the command but could not parse the AI action.") }
-        val action = ai.optString("action", "none")
-        val query = ai.optString("query", "").trim()
-        val target = ai.optString("target", "").trim()
-        sendStatus(TommyStatusEvents.WORKING, "Tommy is executing: ${ai.optString("reply", raw)}")
-        when (action) {
-            "open_instagram_reels" -> { openUrl("https://www.instagram.com/reels/"); return "Done — opening Instagram Reels." }
-            "open_instagram_comments" -> { openApp("Instagram", "com.instagram.android", "https://www.instagram.com/"); return "Instagram opened. Comments require the visible post UI/accessibility layer." }
-            "spotify_search" -> { openUrl("https://open.spotify.com/search/${URLEncoder.encode(query, "UTF-8")}"); return "Done — opening Spotify search for $query." }
-            "search_web" -> { openUrl("https://www.google.com/search?q=${URLEncoder.encode(query, "UTF-8")}"); return "Done — searching Google for $query." }
-            "open_app" -> {
-                val normalized = (target.ifBlank { query }).lowercase()
-                return when {
-                    normalized.contains("instagram") -> { openApp("Instagram", "com.instagram.android", "https://www.instagram.com"); "Done — opening Instagram." }
-                    normalized.contains("youtube") -> { openApp("YouTube", "com.google.android.youtube", "https://www.youtube.com"); "Done — opening YouTube." }
-                    normalized.contains("spotify") -> { openApp("Spotify", "com.spotify.music", "https://open.spotify.com"); "Done — opening Spotify." }
-                    normalized.contains("whatsapp") -> { openWhatsApp(); "Done — opening WhatsApp." }
-                    normalized.contains("google") -> { openApp("Google", "com.google.android.googlequicksearchbox", "https://www.google.com"); "Done — opening Google." }
-                    else -> "I understood the request, but I don't have a safe launcher for $target yet."
-                }
-            }
-            else -> return ai.optString("reply", "I understood you, but no Android action was selected.")
+        val ai = runCatching { JSONObject(raw) }.getOrNull()
+        val canonical = ai?.optString("original")?.trim()?.takeIf { it.isNotBlank() }
+            ?: canonicalCommandFromAi(ai)
+            ?: raw.trim()
+
+        if (canonical.isBlank()) {
+            return "I received the command, but there was no executable request."
+        }
+        return executeSkillCommand(canonical)
+    }
+
+    private fun canonicalCommandFromAi(ai: JSONObject?): String? {
+        if (ai == null) return null
+        val action = ai.optString("action").trim().lowercase()
+        val query = ai.optString("query").trim()
+        val target = ai.optString("target").trim()
+        return when (action) {
+            "open_instagram_reels" -> "Open Instagram Reels"
+            "open_instagram_comments" -> "Open Instagram comments"
+            "spotify_search" -> if (query.isNotBlank()) "Search Spotify for $query" else "Open Spotify"
+            "search_web" -> if (query.isNotBlank()) "Search Google for $query" else "Open Google"
+            "open_app" -> if (target.isNotBlank()) "Open $target" else null
+            else -> null
         }
     }
 
-    private fun openUrl(url: String) {
-        try { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }) }
-        catch (_: Exception) { throw IllegalStateException("Could not open $url") }
-    }
-
-    private fun openRecentApps(appName: String) { try { startActivity(Intent("android.intent.action.RECENT_APPS").apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }); toast("Recent Apps opened — swipe $appName away to close it") } catch (_: Exception) { toast("Android did not allow Recent Apps to open") } }
-
-    private fun setFlashlight(enabled: Boolean) {
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) { toast("Camera permission needed for the flashlight. Open Commands → Light once to allow it."); return }
-        val cameraManager = getSystemService(Context.CAMERA_SERVICE) as CameraManager
-        val cameraId = cameraManager.cameraIdList.firstOrNull { id -> cameraManager.getCameraCharacteristics(id).get(CameraCharacteristics.FLASH_INFO_AVAILABLE) == true }
-        if (cameraId == null) { toast("This phone has no available flashlight"); return }
-        try { cameraManager.setTorchMode(cameraId, enabled); flashlightOn = enabled; toast(if (enabled) "Flashlight ON" else "Flashlight OFF") } catch (_: Exception) { toast("Unable to control flashlight") }
+    private fun executeSkillCommand(command: String): String {
+        sendStatus(TommyStatusEvents.WORKING, "Tommy is executing: $command")
+        val result = TommySkillEngine.execute(applicationContext, command)
+        sendStatus(TommyStatusEvents.MESSAGE, result.message)
+        mainHandler.post {
+            Toast.makeText(this, result.message, Toast.LENGTH_SHORT).show()
+            textToSpeech?.speak(result.message, TextToSpeech.QUEUE_FLUSH, null, "tommy")
+        }
+        return result.message
     }
 
     private fun openApp(appName: String, packageName: String, fallbackUrl: String) {
         val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
-        if (launchIntent != null) { toast("OK, opening $appName"); launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(launchIntent); return }
-        try { toast("OK, opening $appName in browser"); startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(fallbackUrl)).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }) } catch (_: Exception) { throw IllegalStateException("$appName is not available") }
-    }
-
-    private fun openWhatsApp() {
-        val whatsappIntent = Intent(Intent.ACTION_SEND).apply { type = "text/plain"; setPackage("com.whatsapp"); putExtra(Intent.EXTRA_TEXT, ""); addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
-        try { toast("OK, opening WhatsApp"); startActivity(whatsappIntent) } catch (_: Exception) {
-            val launchIntent = packageManager.getLaunchIntentForPackage("com.whatsapp")
-            if (launchIntent != null) { toast("OK, opening WhatsApp"); launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(launchIntent) } else throw IllegalStateException("WhatsApp is not installed")
+        if (launchIntent != null) {
+            toast("OK, opening $appName")
+            launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            startActivity(launchIntent)
+            return
+        }
+        try {
+            toast("OK, opening $appName in browser")
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(fallbackUrl)).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) })
+        } catch (_: Exception) {
+            throw IllegalStateException("$appName is not available")
         }
     }
 
-    private fun toast(message: String) { mainHandler.post { sendStatus(TommyStatusEvents.MESSAGE, message); Toast.makeText(this, message, Toast.LENGTH_SHORT).show(); textToSpeech?.speak(message, TextToSpeech.QUEUE_FLUSH, null, "tommy") } }
+    private fun openWhatsApp() {
+        val whatsappIntent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            setPackage("com.whatsapp")
+            putExtra(Intent.EXTRA_TEXT, "")
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        try {
+            toast("OK, opening WhatsApp")
+            startActivity(whatsappIntent)
+        } catch (_: Exception) {
+            val launchIntent = packageManager.getLaunchIntentForPackage("com.whatsapp")
+            if (launchIntent != null) {
+                toast("OK, opening WhatsApp")
+                launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                startActivity(launchIntent)
+            } else {
+                throw IllegalStateException("WhatsApp is not installed")
+            }
+        }
+    }
 
-    private fun scheduleListeningRestart() { mainHandler.postDelayed({ if (!stopping && !TommyVoiceController.isListening()) startHeyTommyListening() }, 600L) }
+    private fun toast(message: String) {
+        mainHandler.post {
+            sendStatus(TommyStatusEvents.MESSAGE, message)
+            Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+            textToSpeech?.speak(message, TextToSpeech.QUEUE_FLUSH, null, "tommy")
+        }
+    }
 
-    private fun sendStatus(status: String, text: String) { sendBroadcast(Intent(TommyStatusEvents.ACTION).apply { setPackage(packageName); putExtra(TommyStatusEvents.EXTRA_STATUS, status); putExtra(TommyStatusEvents.EXTRA_TEXT, text) }) }
+    private fun scheduleListeningRestart() {
+        mainHandler.postDelayed({ if (!stopping && !TommyVoiceController.isListening()) startHeyTommyListening() }, 600L)
+    }
 
-    private fun String.normalizeVoiceText(): String = lowercase().replace(Regex("[^a-z0-9 ]"), " ").replace(Regex("\\s+"), " ").trim()
+    private fun sendStatus(status: String, text: String) {
+        sendBroadcast(Intent(TommyStatusEvents.ACTION).apply {
+            setPackage(packageName)
+            putExtra(TommyStatusEvents.EXTRA_STATUS, status)
+            putExtra(TommyStatusEvents.EXTRA_TEXT, text)
+        })
+    }
+
+    private fun String.normalizeVoiceText(): String =
+        lowercase().replace(Regex("[^a-z0-9 ]"), " ").replace(Regex("\\s+"), " ").trim()
 
     override fun onDestroy() {
         stopping = true; isRunning = false; mainHandler.removeCallbacksAndMessages(null)
@@ -249,13 +276,30 @@ class FloatingTommyService : Service(), TommyVoiceController.Listener {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
-    private fun createNotificationChannel() { if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) { val channel = NotificationChannel(NotificationChannelId, "Hey Tommy", NotificationManager.IMPORTANCE_LOW).apply { description = "Keeps the floating Tommy assistant and voice listener active" }; getSystemService(NotificationManager::class.java).createNotificationChannel(channel) } }
+    private fun createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(NotificationChannelId, "Hey Tommy", NotificationManager.IMPORTANCE_LOW).apply {
+                description = "Keeps the floating Tommy assistant and voice listener active"
+            }
+            getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
+        }
+    }
 
     private fun buildNotification(): Notification = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-        Notification.Builder(this, NotificationChannelId).setContentTitle("Hey Tommy is listening").setContentText("Say Hey Tommy to activate the assistant").setSmallIcon(android.R.drawable.ic_btn_speak_now).setOngoing(true).build()
+        Notification.Builder(this, NotificationChannelId)
+            .setContentTitle("Hey Tommy is listening")
+            .setContentText("Say Hey Tommy to activate the assistant")
+            .setSmallIcon(android.R.drawable.ic_btn_speak_now)
+            .setOngoing(true)
+            .build()
     } else {
         @Suppress("DEPRECATION")
-        Notification.Builder(this).setContentTitle("Hey Tommy is listening").setContentText("Say Hey Tommy to activate the assistant").setSmallIcon(android.R.drawable.ic_btn_speak_now).setOngoing(true).build()
+        Notification.Builder(this)
+            .setContentTitle("Hey Tommy is listening")
+            .setContentText("Say Hey Tommy to activate the assistant")
+            .setSmallIcon(android.R.drawable.ic_btn_speak_now)
+            .setOngoing(true)
+            .build()
     }
 
     companion object {
