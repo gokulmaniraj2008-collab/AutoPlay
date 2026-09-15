@@ -6,7 +6,7 @@ import android.content.Context
  * Central registry for Tommy capabilities.
  *
  * New features should be added as skills and registered here instead of growing
- * one large when/else command handler in the UI.
+ * one large when/else command handler in the UI or floating service.
  */
 object TommySkillRegistry {
     private val skills = linkedMapOf<String, TommySkill>()
@@ -19,6 +19,9 @@ object TommySkillRegistry {
         register(HelpSkill())
         register(InstagramSkill())
         register(AppLaunchSkill())
+        register(WebSearchSkill())
+        register(SpotifySkill())
+        register(DeviceControlSkill())
 
         initialized = true
     }
@@ -79,6 +82,6 @@ private class HelpSkill : TommySkill {
         TommySkillResult.success(
             skillId = id,
             action = "SHOW_HELP",
-            message = "Try: Open Instagram, go to Reels, scroll, like, follow, open comments, open YouTube, Google, or WhatsApp."
+            message = "Try: Open Instagram, go to Reels, scroll, like, follow, open comments, open YouTube, Google, WhatsApp, search Google, or search Spotify."
         )
 }
