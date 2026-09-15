@@ -80,7 +80,7 @@ class TommyAccessibilityService : AccessibilityService() {
 
     private fun performTommyActionInternal(action: String): Boolean {
         return when {
-            action == "OPEN_INSTAGRAM_REELS" -> waitForInstagramAndClick("Reels", "reels")
+            action == "OPEN_INSTAGRAM_REELS" -> openInstagramReelsReliably()
             action == "SCROLL_REEL" -> if (isInstagramForeground()) dispatchSwipe(0.50f, 0.78f, 0.50f, 0.25f, 350) else false
             action == "LIKE_REEL" -> {
                 if (!isInstagramForeground()) return false
@@ -103,6 +103,42 @@ class TommyAccessibilityService : AccessibilityService() {
                 openInstagramProfileAndFollow(username)
             }
             else -> false
+        }
+    }
+
+    /**
+     * Launch Instagram when needed, wait for its first window/content events,
+     * then locate the Reels tab through accessibility. If Instagram does not
+     * expose the tab as a node (which varies by version), use the stable
+     * bottom-navigation position as a final fallback. No Gemini/Vision call.
+     */
+    private fun openInstagramReelsReliably(): Boolean {
+        try {
+            if (!isInstagramForeground()) {
+                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.instagram.com/")).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                })
+                if (!waitForForegroundPackage(INSTAGRAM_PACKAGE, 5000L)) return false
+            }
+
+            // Give Instagram time to finish its first layout and expose nodes.
+            Thread.sleep(900L)
+
+            // Retry accessibility lookup because Instagram's Compose/custom UI
+            // can populate the accessibility tree a little after the window event.
+            repeat(6) {
+                if (!isInstagramForeground()) return false
+                if (findAndClickAny("Reels", "reels")) return true
+                if (findAndClickExactOrDescription("Reels", "reels")) return true
+                Thread.sleep(350L)
+            }
+
+            // Instagram normally places Reels in the bottom navigation.
+            // This fallback keeps the command working when the label is not
+            // exposed through AccessibilityNodeInfo.
+            return dispatchTapNearRightCenter(0.60f, 0.94f)
+        } catch (_: Exception) {
+            return false
         }
     }
 
