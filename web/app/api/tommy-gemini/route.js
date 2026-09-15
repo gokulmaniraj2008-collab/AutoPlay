@@ -2,6 +2,14 @@ import { NextResponse } from 'next/server';
 
 const SYSTEM_PROMPT = `You are Tommy, an Android voice assistant. Convert the user's natural-language request into one safe, structured action. Return ONLY valid JSON with keys: reply, action, target, query. Allowed actions: open_app, search_web, youtube_search, open_instagram_reels, open_instagram_comments, spotify_search, none. target is an app/package-style target when useful. query contains the search text when applicable. For requests to search YouTube, use action youtube_search, target YouTube, and put ONLY the requested search terms in query. For requests only to open YouTube, use action open_app with target YouTube and an empty query. Never invent unsupported actions. If the request is unclear, use action none.`;
 
+function youtubeCardReply(query, openOnly = false) {
+  if (openOnly) {
+    return '▶ YouTube\n\n┌────────────────────────────┐\n│ ▶  YouTube                  │\n│                            │\n│ ▶  YouTube is ready         │\n│                            │\n│ YouTube is open.            │\n│                            │\n│ [ Open YouTube ]            │\n└────────────────────────────┘';
+  }
+
+  return `▶ YouTube\n\n┌────────────────────────────┐\n│ ▶  YouTube                  │\n│                            │\n│ 🔍 ${query}                 │\n│                            │\n│ YouTube search results      │\n│ are open.                  │\n│                            │\n│ [ Open YouTube results ]    │\n└────────────────────────────┘`;
+}
+
 export async function POST(request) {
   try {
     const body = await request.json();
@@ -60,12 +68,22 @@ export async function POST(request) {
 
     const cleaned = raw.replace(/^```json\s*/i, '').replace(/\s*```$/i, '').trim();
     const result = JSON.parse(cleaned);
+    const action = typeof result.action === 'string' ? result.action : 'none';
+    const target = typeof result.target === 'string' ? result.target : '';
+    const query = typeof result.query === 'string' ? result.query : '';
+
+    let reply = typeof result.reply === 'string' ? result.reply : `I understood: ${text}`;
+    if (action === 'youtube_search') {
+      reply = youtubeCardReply(query);
+    } else if (action === 'open_app' && target.equals?.('YouTube')) {
+      reply = youtubeCardReply('', true);
+    }
 
     return NextResponse.json({
-      reply: typeof result.reply === 'string' ? result.reply : `I understood: ${text}`,
-      action: typeof result.action === 'string' ? result.action : 'none',
-      target: typeof result.target === 'string' ? result.target : '',
-      query: typeof result.query === 'string' ? result.query : '',
+      reply,
+      action,
+      target,
+      query,
     });
   } catch (error) {
     return NextResponse.json(
