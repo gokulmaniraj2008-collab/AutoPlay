@@ -19,6 +19,7 @@ object TommySkillRegistry {
         register(HelpSkill())
         register(InstagramSkill())
         register(AppLaunchSkill())
+        register(YouTubeSkill())
         register(WebSearchSkill())
         register(SpotifySkill())
         register(DeviceControlSkill())
@@ -66,6 +67,6 @@ private class HelpSkill : TommySkill {
     override fun execute(context: Context, command: String): TommySkillResult = TommySkillResult.success(
         skillId = id,
         action = "SHOW_HELP",
-        message = "Try: Open Instagram, go to Reels, scroll, like, follow, open comments, open YouTube, Google, WhatsApp, search Google, search Spotify, or send a message to ChatGPT."
+        message = "Try: Open Instagram, go to Reels, scroll, like, follow, open comments, open YouTube, search YouTube, Google, WhatsApp, search Google, search Spotify, or send a message to ChatGPT."
     )
 }
