@@ -1,5 +1,6 @@
 package com.gokul.autoplay
 
+import android.app.Activity
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -33,7 +34,7 @@ class TommyScreenCaptureService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val resultCode = intent?.getIntExtra(EXTRA_RESULT_CODE, -1) ?: -1
         val permissionData = intent?.parcelableIntentExtra<Intent>(EXTRA_DATA)
-        if (resultCode != RESULT_OK || permissionData == null) {
+        if (resultCode != Activity.RESULT_OK || permissionData == null) {
             stopSelf()
             return START_NOT_STICKY
         }
