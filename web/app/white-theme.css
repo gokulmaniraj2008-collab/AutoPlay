@@ -21,11 +21,7 @@ footer { background: #ffffff; border-top-color: #e5e7eb; }
 .sideLogo { background: #111827; color: #ffffff; }
 .sideIcon { color: #4b5563; }
 .sideIcon:hover { background: #f3f4f6; color: #111827; }
-.sideSearch {
-  background: #f7f8fa;
-  border-color: #e5e7eb;
-  color: #6b7280;
-}
+.sideSearch { background: #f7f8fa; border-color: #e5e7eb; color: #6b7280; }
 .sideFeatures button { color: #111827; }
 .sideFeatures button:hover { background: #f3f4f6; }
 .sideFeatures svg { color: #374151; }
@@ -33,32 +29,10 @@ footer { background: #ffffff; border-top-color: #e5e7eb; }
 .sideRecentHeader { color: #6b7280; }
 .sideRecentHeader button { color: #6b7280; }
 .sideRecentHeader button:hover { background: #f3f4f6; color: #111827; }
-.recentChatRow {
-  position: relative;
-  display: flex;
-  align-items: center;
-  min-height: 46px;
-  border-radius: 9px;
-  overflow: hidden;
-}
+.recentChatRow { position: relative; display: flex; align-items: center; min-height: 46px; border-radius: 9px; overflow: hidden; }
 .recentChatRow.active { background: #eef2f7; }
 .recentChatRow:hover { background: #f3f4f6; }
-.recentItem {
-  flex: 1;
-  min-width: 0;
-  border: 0;
-  background: transparent;
-  color: #111827;
-  text-align: left;
-  border-radius: 9px;
-  padding: 13px 44px 13px 10px;
-  font: inherit;
-  font-size: 14px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  cursor: pointer;
-}
+.recentItem { flex: 1; min-width: 0; border: 0; background: transparent; color: #111827; text-align: left; border-radius: 9px; padding: 13px 44px 13px 10px; font: inherit; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
 .recentItem:hover { background: transparent; }
 .recentItem.active { background: transparent; color: #111827; }
 .recentEmpty { color: #9ca3af; }
@@ -67,33 +41,12 @@ footer { background: #ffffff; border-top-color: #e5e7eb; }
 .sideBottom { background: #ffffff; }
 .tommyGo { background: #ffffff; border-color: #d1d5db; color: #e88920; box-shadow: inset 0 0 0 7px #ffffff; }
 
-/* Long-press delete control for each recent chat */
-.chatDeleteButton {
-  position: absolute;
-  top: 50%;
-  right: 8px;
-  transform: translateY(-50%);
-  width: 32px;
-  height: 32px;
-  border: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 9px;
-  background: #fee2e2;
-  color: #dc2626;
-  cursor: pointer;
-  z-index: 2;
-}
-.chatDeleteButton:hover,
-.chatDeleteButton:focus-visible {
-  background: #fecaca;
-  color: #b91c1c;
-  outline: none;
-}
+/* Delete control is hidden unless a chat has actually been long-pressed. */
+.chatDeleteButton { display: none; position: absolute; top: 50%; right: 8px; transform: translateY(-50%); width: 32px; height: 32px; border: 0; align-items: center; justify-content: center; border-radius: 9px; background: #fee2e2; color: #dc2626; cursor: pointer; z-index: 2; font-size: 22px; line-height: 1; }
+.recentChatRow.deleting .chatDeleteButton { display: inline-flex; }
+.chatDeleteButton:hover, .chatDeleteButton:focus-visible { background: #fecaca; color: #b91c1c; outline: none; }
 
 @media (max-width: 600px) {
   .sideMenu { width: 88vw; padding-top: 26px; }
   .chatDeleteButton { width: 34px; height: 34px; right: 7px; }
 }
-
