@@ -128,61 +128,7 @@ class MainActivity : ComponentActivity() {
         if (skillCommand.isBlank()) return "FAILED: Tommy could not understand the web command"
 
         val result = TommySkillEngine.execute(this, skillCommand)
-        val isYouTube = action == "youtube_search" || (action == "open_app" && target.equals("YouTube", ignoreCase = true))
-
-        if (result.success && isYouTube) {
-            showYouTubeCard(query)
-            return if (query.isNotBlank()) {
-                "▶ YouTube\n\n┌────────────────────────────┐\n│ ▶  YouTube                  │\n│                            │\n│ 🔍 $query                  │\n│                            │\n│ YouTube search results      │\n│ are open.                  │\n│                            │\n│ [ Open YouTube results ]    │\n└────────────────────────────┘"
-            } else {
-                "▶ YouTube\n\n┌────────────────────────────┐\n│ ▶  YouTube                  │\n│                            │\n│ ▶  YouTube is ready         │\n│                            │\n│ YouTube is open.            │\n│                            │\n│ [ Open YouTube ]            │\n└────────────────────────────┘"
-            }
-        }
-
         return if (result.success) "OK: ${result.message}" else "FAILED: ${result.message}"
-    }
-
-    private fun showYouTubeCard(query: String) {
-        val safeQuery = JSONObject.quote(query)
-        runOnUiThread {
-            webView.postDelayed({
-                val script = """
-                    (function() {
-                      const query = $safeQuery;
-                      const chat = document.querySelector('.chat');
-                      if (!chat) return;
-                      const old = document.getElementById('tommy-youtube-card');
-                      if (old) old.remove();
-                      if (!document.getElementById('tommy-youtube-card-style')) {
-                        const style = document.createElement('style');
-                        style.id = 'tommy-youtube-card-style';
-                        style.textContent = '.tommyYoutubeCard { margin: 14px 0; border: 1px solid #27272a; border-radius: 18px; overflow: hidden; background: #0b0b0c; box-shadow: 0 8px 28px rgba(0,0,0,.18); }' +
-                          '.tommyYoutubeCardTop { padding: 14px 16px; display:flex; align-items:center; gap:10px; color:#fff; font-weight:700; }' +
-                          '.tommyYoutubeDot { width:28px; height:28px; border-radius:9px; display:grid; place-items:center; background:#ff0000; color:#fff; font-size:14px; }' +
-                          '.tommyYoutubeSearch { margin:0 14px 14px; padding:12px 14px; border-radius:12px; background:#171719; color:#f4f4f5; font-size:14px; }' +
-                          '.tommyYoutubeStatus { padding:0 16px 16px; color:#a1a1aa; font-size:13px; }' +
-                          '.tommyYoutubeOpen { margin:0 14px 14px; width:calc(100% - 28px); border:0; border-radius:12px; padding:11px 14px; background:#fff; color:#111; font-weight:700; cursor:pointer; }';
-                        document.head.appendChild(style);
-                      }
-                      const hasQuery = query.trim().length > 0;
-                      const safeText = query.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-                      const card = document.createElement('div');
-                      card.id = 'tommy-youtube-card';
-                      card.className = 'tommyYoutubeCard';
-                      const searchMarkup = hasQuery ? '<div class="tommyYoutubeSearch">🔍 ' + safeText + '</div>' : '<div class="tommyYoutubeSearch">▶ YouTube is ready</div>';
-                      const statusText = hasQuery ? 'YouTube search results are open.' : 'YouTube is open.';
-                      const buttonText = hasQuery ? 'Open YouTube results' : 'Open YouTube';
-                      card.innerHTML = '<div class="tommyYoutubeCardTop"><span class="tommyYoutubeDot">▶</span><span>YouTube</span></div>' + searchMarkup + '<div class="tommyYoutubeStatus">' + statusText + '</div><button class="tommyYoutubeOpen" type="button">' + buttonText + '</button>';
-                      chat.appendChild(card);
-                      card.querySelector('button')?.addEventListener('click', function() {
-                        window.location.href = hasQuery ? 'https://www.youtube.com/results?search_query=' + encodeURIComponent(query) : 'https://www.youtube.com';
-                      });
-                      card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-                    })();
-                """.trimIndent()
-                webView.evaluateJavascript(script, null)
-            }, 250L)
-        }
     }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
