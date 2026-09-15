@@ -46,7 +46,7 @@ jobs:
       - name: Install Android SDK packages
         working-directory: .
         run: |
-          sdkmanager "platform-tools" "platforms;android-37"
+          sdkmanager "platform-tools" "platforms;android-36"
 
       - name: Install Gradle 9.6.0
         working-directory: .
