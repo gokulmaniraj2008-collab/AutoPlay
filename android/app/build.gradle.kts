@@ -30,15 +30,19 @@ android {
         }
     }
 
+    val tommyMakeWebhookUrl = System.getenv("TOMMY_MAKE_WEBHOOK_URL") ?: ""
+
     buildTypes {
         getByName("debug") {
             buildConfigField("String", "SUPABASE_PUBLISHABLE_KEY", "\"${System.getenv("SUPABASE_PUBLISHABLE_KEY") ?: ""}\"")
             buildConfigField("String", "GEMINI_API_KEY", "\"${System.getenv("GEMINI_API_KEY") ?: ""}\"")
+            buildConfigField("String", "TOMMY_MAKE_WEBHOOK_URL", "\"${tommyMakeWebhookUrl.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
         }
         getByName("release") {
             signingConfig = signingConfigs.getByName("release")
             buildConfigField("String", "SUPABASE_PUBLISHABLE_KEY", "\"${System.getenv("SUPABASE_PUBLISHABLE_KEY") ?: ""}\"")
             buildConfigField("String", "GEMINI_API_KEY", "\"${System.getenv("GEMINI_API_KEY") ?: ""}\"")
+            buildConfigField("String", "TOMMY_MAKE_WEBHOOK_URL", "\"${tommyMakeWebhookUrl.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
         }
     }
 }
