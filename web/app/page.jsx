@@ -3,8 +3,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { Mic, MicOff, Send, Power, ChevronUp, Search, Music2, CheckCircle2, Loader2, Wifi } from 'lucide-react';
 
-const SUPABASE_URL = 'https://bqrpgtxtmatxwtdpuoyh.supabase.co';
-const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || '';
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://bqrpgtxtmatxwtdpuoyh.supabase.co';
+const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 const headers = { 'Content-Type': 'application/json', apikey: SUPABASE_ANON_KEY };
 
 async function askGemini(text) {
