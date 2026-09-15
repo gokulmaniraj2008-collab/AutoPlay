@@ -75,16 +75,11 @@ export async function POST(request) {
     let reply = typeof result.reply === 'string' ? result.reply : `I understood: ${text}`;
     if (action === 'youtube_search') {
       reply = youtubeCardReply(query);
-    } else if (action === 'open_app' && target.equals?.('YouTube')) {
+    } else if (action === 'open_app' && target.toLowerCase() === 'youtube') {
       reply = youtubeCardReply('', true);
     }
 
-    return NextResponse.json({
-      reply,
-      action,
-      target,
-      query,
-    });
+    return NextResponse.json({ reply, action, target, query });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Unknown Gemini server error' },
