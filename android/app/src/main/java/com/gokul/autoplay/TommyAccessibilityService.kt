@@ -1,6 +1,8 @@
 package com.gokul.autoplay
 
 import android.accessibilityservice.AccessibilityService
+import android.content.Intent
+import android.net.Uri
 import android.view.accessibility.AccessibilityNodeInfo
 import android.view.accessibility.AccessibilityEvent
 import android.os.Bundle
@@ -31,22 +33,64 @@ class TommyAccessibilityService : AccessibilityService() {
     private fun openRecentAppsInternal() { performGlobalAction(GLOBAL_ACTION_RECENTS) }
 
     private fun performTommyActionInternal(action: String): Boolean {
-        return when (action) {
-            "OPEN_INSTAGRAM_REELS" -> findAndClickAny("Reels", "reels")
-            "SCROLL_REEL" -> dispatchSwipe(0.50f, 0.78f, 0.50f, 0.25f, 350)
-            "LIKE_REEL" -> {
+        return when {
+            action == "OPEN_INSTAGRAM_REELS" ->
+                waitForInstagramAndClick("Reels", "reels")
+
+            action == "SCROLL_REEL" ->
+                if (isInstagramForeground()) dispatchSwipe(0.50f, 0.78f, 0.50f, 0.25f, 350) else false
+
+            action == "LIKE_REEL" -> {
+                if (!isInstagramForeground()) return false
                 val clicked = findAndClickAny("Like", "like")
                 if (!clicked) dispatchTapNearRightCenter(0.90f, 0.62f) else true
             }
-            "FOLLOW_ACCOUNT" -> {
-                val clicked = findAndClickAny("Follow", "follow")
-                if (!clicked) findAndClickAny("Follow back", "follow back") else true
+
+            action == "FOLLOW_ACCOUNT" -> {
+                if (!isInstagramForeground()) return false
+                // Prefer an actual Follow button. Avoid matching labels such as
+                // "Following" unless the UI exposes only that state.
+                val clicked = findAndClickExactOrDescription("Follow", "follow")
+                if (!clicked) findAndClickExactOrDescription("Follow back", "follow back") else true
             }
-            "OPEN_COMMENTS" -> {
+
+            action == "OPEN_COMMENTS" -> {
+                if (!isInstagramForeground()) return false
                 val clicked = findAndClickAny("Comment", "comment", "Comments", "comments")
                 if (!clicked) dispatchTapNearRightCenter(0.90f, 0.53f) else true
             }
+
+            action.startsWith("FOLLOW_PROFILE:") -> {
+                val username = action.removePrefix("FOLLOW_PROFILE:").trim().removePrefix("@").trim()
+                if (username.isBlank()) return false
+                openInstagramProfileAndFollow(username)
+            }
+
             else -> false
+        }
+    }
+
+    private fun isInstagramForeground(): Boolean =
+        rootInActiveWindow?.packageName?.toString() == INSTAGRAM_PACKAGE
+
+    private fun waitForInstagramAndClick(vararg labels: String): Boolean {
+        if (!waitForForegroundPackage(INSTAGRAM_PACKAGE, 2500L)) return false
+        return findAndClickAny(*labels)
+    }
+
+    private fun openInstagramProfileAndFollow(username: String): Boolean {
+        return try {
+            startActivity(
+                Intent(Intent.ACTION_VIEW, Uri.parse("https://www.instagram.com/$username/")).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+            )
+            if (!waitForForegroundPackage(INSTAGRAM_PACKAGE, 4000L)) return false
+            Thread.sleep(500L)
+            val clicked = findAndClickExactOrDescription("Follow", "follow")
+            if (!clicked) findAndClickExactOrDescription("Follow back", "follow back") else true
+        } catch (_: Exception) {
+            false
         }
     }
 
@@ -113,6 +157,23 @@ class TommyAccessibilityService : AccessibilityService() {
         return false
     }
 
+    private fun findAndClickExactOrDescription(vararg labels: String): Boolean {
+        val root = rootInActiveWindow ?: return false
+        val wanted = labels.map { it.trim().lowercase() }
+        val queue = ArrayDeque<AccessibilityNodeInfo>()
+        queue.add(root)
+        while (queue.isNotEmpty()) {
+            val node = queue.removeFirst()
+            val text = node.text?.toString()?.trim()?.lowercase().orEmpty()
+            val description = node.contentDescription?.toString()?.trim()?.lowercase().orEmpty()
+            if (wanted.any { it == text || it == description }) {
+                if (clickNodeOrParent(node)) return true
+            }
+            for (i in 0 until node.childCount) node.getChild(i)?.let(queue::add)
+        }
+        return false
+    }
+
     private fun clickNodeOrParent(node: AccessibilityNodeInfo?): Boolean {
         var current = node
         repeat(5) {
@@ -150,6 +211,7 @@ class TommyAccessibilityService : AccessibilityService() {
     }
 
     companion object {
+        private const val INSTAGRAM_PACKAGE = "com.instagram.android"
         @Volatile private var instance: TommyAccessibilityService? = null
         @Volatile private var foregroundPackage: String = ""
         private val foregroundLock = Object()
