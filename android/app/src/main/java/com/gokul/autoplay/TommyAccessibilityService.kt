@@ -2,10 +2,13 @@ package com.gokul.autoplay
 
 import android.accessibilityservice.AccessibilityService
 import android.content.Intent
+import android.graphics.Bitmap
 import android.net.Uri
+import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.view.accessibility.AccessibilityNodeInfo
 import android.view.accessibility.AccessibilityEvent
-import android.os.Bundle
 
 class TommyAccessibilityService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
@@ -32,6 +35,37 @@ class TommyAccessibilityService : AccessibilityService() {
 
     private fun openRecentAppsInternal() { performGlobalAction(GLOBAL_ACTION_RECENTS) }
 
+    /**
+     * Captures the current display through Android's Accessibility screenshot API.
+     * This is the foundation for Tommy's future visual/vision mode.
+     */
+    private fun captureScreenInternal(callback: (Bitmap?) -> Unit) {
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.R) {
+            callback(null)
+            return
+        }
+
+        val displayId = display?.displayId ?: 0
+        takeScreenshot(
+            displayId,
+            mainExecutor,
+            object : TakeScreenshotCallback {
+                override fun onSuccess(screenshot: ScreenshotResult) {
+                    val bitmap = Bitmap.wrapHardwareBuffer(
+                        screenshot.hardwareBuffer,
+                        screenshot.colorSpace
+                    )?.copy(Bitmap.Config.ARGB_8888, false)
+                    screenshot.hardwareBuffer.close()
+                    callback(bitmap)
+                }
+
+                override fun onFailure(errorCode: Int) {
+                    callback(null)
+                }
+            }
+        )
+    }
+
     private fun performTommyActionInternal(action: String): Boolean {
         return when {
             action == "OPEN_INSTAGRAM_REELS" ->
@@ -48,8 +82,6 @@ class TommyAccessibilityService : AccessibilityService() {
 
             action == "FOLLOW_ACCOUNT" -> {
                 if (!isInstagramForeground()) return false
-                // Prefer an actual Follow button. Avoid matching labels such as
-                // "Following" unless the UI exposes only that state.
                 val clicked = findAndClickExactOrDescription("Follow", "follow")
                 if (!clicked) findAndClickExactOrDescription("Follow back", "follow back") else true
             }
@@ -220,9 +252,20 @@ class TommyAccessibilityService : AccessibilityService() {
         fun performTommyAction(action: String): Boolean = instance?.performTommyActionInternal(action) == true
         fun sendChatGPTMessage(message: String): Boolean = instance?.sendChatGPTMessageInternal(message) == true
 
+        /** Capture the current phone screen for Tommy's future visual reasoning pipeline. */
+        fun captureScreen(callback: (Bitmap?) -> Unit) {
+            val service = instance
+            if (service == null) {
+                callback(null)
+                return
+            }
+            Handler(Looper.getMainLooper()).post {
+                service.captureScreenInternal(callback)
+            }
+        }
+
         fun isServiceEnabled(): Boolean = instance != null
 
-        /** Wait for an accessibility event confirming that an app is foreground. */
         fun waitForForegroundPackage(packageName: String, timeoutMs: Long = 3000L): Boolean {
             if (foregroundPackage == packageName) return true
             if (instance == null) return false
