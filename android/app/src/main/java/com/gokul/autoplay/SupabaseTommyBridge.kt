@@ -23,13 +23,13 @@ class SupabaseTommyBridge(
     }
 
     fun start() {
-        if (!running.compareAndSet(false, true)) return
         if (BuildConfig.SUPABASE_PUBLISHABLE_KEY.isBlank()) return
+        if (!running.compareAndSet(false, true)) return
         executor.execute {
             upsertDevice("online")
             while (running.get()) {
                 try { pollOnce() } catch (_: Exception) { }
-                try { Thread.sleep(1500L) } catch (_: InterruptedException) { break }
+                try { Thread.sleep(800L) } catch (_: InterruptedException) { break }
             }
             upsertDevice("offline")
         }
@@ -45,18 +45,22 @@ class SupabaseTommyBridge(
         val url = "$SUPABASE_URL/rest/v1/tommy_commands?select=*&channel=eq.$CHANNEL&status=eq.pending&order=created_at.asc&limit=1"
         val response = request("GET", url, null)
         if (response.code !in 200..299 || response.body.isBlank() || response.body == "[]") return
+
         val command = org.json.JSONArray(response.body).getJSONObject(0)
         val id = command.getString("id")
         if (!patchCommand(id, "processing", null)) return
+
         postEvent("processing", "Tommy received: ${command.optString("command")}", id)
         try {
             val result = onCommand(command)
-            patchCommand(id, "done", result)
-            postEvent("done", result, id)
+            if (patchCommand(id, "done", result)) {
+                postEvent("done", result, id)
+            }
         } catch (e: Exception) {
             val message = e.message ?: "Tommy could not execute the command"
-            patchCommand(id, "failed", message)
-            postEvent("failed", message, id)
+            if (patchCommand(id, "failed", message)) {
+                postEvent("failed", message, id)
+            }
         }
     }
 
@@ -67,7 +71,12 @@ class SupabaseTommyBridge(
             put("updated_at", Instant.now().toString())
         }
         val idEncoded = URLEncoder.encode(id, "UTF-8")
-        return request("PATCH", "$SUPABASE_URL/rest/v1/tommy_commands?id=eq.$idEncoded", payload.toString()).code in 200..299
+        return request(
+            "PATCH",
+            "$SUPABASE_URL/rest/v1/tommy_commands?id=eq.$idEncoded",
+            payload.toString(),
+            "return=minimal"
+        ).code in 200..299
     }
 
     private fun postEvent(type: String, message: String, commandId: String?) {
@@ -101,6 +110,7 @@ class SupabaseTommyBridge(
             connectTimeout = 8000
             readTimeout = 10000
             setRequestProperty("apikey", BuildConfig.SUPABASE_PUBLISHABLE_KEY)
+            setRequestProperty("Authorization", "Bearer ${BuildConfig.SUPABASE_PUBLISHABLE_KEY}")
             setRequestProperty("Content-Type", "application/json")
             setRequestProperty("Accept", "application/json")
             if (prefer != null) setRequestProperty("Prefer", prefer)
