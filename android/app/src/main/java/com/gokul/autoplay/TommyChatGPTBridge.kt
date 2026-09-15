@@ -8,7 +8,7 @@ import java.net.URL
 
 /** Secure client-side bridge to the server-side ChatGPT brain. No OpenAI key is stored in Android. */
 object TommyChatGPTBridge {
-    private const val ENDPOINT = "https://auto-play-4qkv.vercel.app/api/tommy-chatgpt"
+    private const val ENDPOINT = "https://auto-play-gokulmaniraj2008-collabs-projects.vercel.app/api/tommy-chatgpt"
     private const val TIMEOUT_MS = 12_000
 
     data class Result(
@@ -30,20 +30,16 @@ object TommyChatGPTBridge {
                 setRequestProperty("Content-Type", "application/json; charset=utf-8")
                 setRequestProperty("Accept", "application/json")
             }
-
             val payload = JSONObject().apply { put("text", command) }.toString()
             connection.outputStream.use { it.write(payload.toByteArray(Charsets.UTF_8)) }
-
             val status = connection.responseCode
             val stream = if (status in 200..299) connection.inputStream else connection.errorStream
             val body = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
             connection.disconnect()
-
             if (status !in 200..299) {
                 val details = runCatching { JSONObject(body).optString("error") }.getOrNull().orEmpty()
                 throw IllegalStateException(details.ifBlank { "ChatGPT bridge HTTP $status" })
             }
-
             val json = JSONObject(body)
             Result(
                 reply = json.optString("reply", "Tommy understood your command."),
