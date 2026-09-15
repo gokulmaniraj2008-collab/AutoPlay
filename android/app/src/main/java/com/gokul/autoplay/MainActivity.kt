@@ -148,6 +148,7 @@ class MainActivity : ComponentActivity() {
         val skillCommand = when (action) {
             "open_app" -> if (target.isNotBlank()) "open $target" else original
             "search_web" -> if (query.isNotBlank()) "search Google for $query" else original
+            "youtube_search" -> if (query.isNotBlank()) "search YouTube for $query" else "open YouTube"
             "open_instagram_reels" -> "open Instagram Reels"
             "open_instagram_comments" -> "open Instagram and open comments"
             "spotify_search" -> if (query.isNotBlank()) "search Spotify for $query" else original
@@ -158,10 +159,63 @@ class MainActivity : ComponentActivity() {
         if (skillCommand.isBlank()) return "FAILED: Tommy could not understand the web command"
 
         val result = TommySkillEngine.execute(this, skillCommand)
+
+        if (result.success && action == "youtube_search" && query.isNotBlank()) {
+            showYouTubeCard(query)
+        }
+
         return if (result.success) {
             "OK: ${result.message}"
         } else {
             "FAILED: ${result.message}"
+        }
+    }
+
+    private fun showYouTubeCard(query: String) {
+        val safeQuery = JSONObject.quote(query)
+        runOnUiThread {
+            webView.postDelayed({
+                val script = """
+                    (function() {
+                      const query = $safeQuery;
+                      const chat = document.querySelector('.chat');
+                      if (!chat) return;
+
+                      const old = document.getElementById('tommy-youtube-card');
+                      if (old) old.remove();
+
+                      if (!document.getElementById('tommy-youtube-card-style')) {
+                        const style = document.createElement('style');
+                        style.id = 'tommy-youtube-card-style';
+                        style.textContent = `
+                          .tommyYoutubeCard { margin: 14px 0; border: 1px solid #27272a; border-radius: 18px; overflow: hidden; background: #0b0b0c; box-shadow: 0 8px 28px rgba(0,0,0,.18); }
+                          .tommyYoutubeCardTop { padding: 14px 16px; display:flex; align-items:center; gap:10px; color:#fff; font-weight:700; }
+                          .tommyYoutubeDot { width:28px; height:28px; border-radius:9px; display:grid; place-items:center; background:#ff0000; color:#fff; font-size:14px; }
+                          .tommyYoutubeSearch { margin:0 14px 14px; padding:12px 14px; border-radius:12px; background:#171719; color:#f4f4f5; font-size:14px; }
+                          .tommyYoutubeStatus { padding:0 16px 16px; color:#a1a1aa; font-size:13px; }
+                          .tommyYoutubeOpen { margin:0 14px 14px; width:calc(100% - 28px); border:0; border-radius:12px; padding:11px 14px; background:#fff; color:#111; font-weight:700; cursor:pointer; }
+                        `;
+                        document.head.appendChild(style);
+                      }
+
+                      const card = document.createElement('div');
+                      card.id = 'tommy-youtube-card';
+                      card.className = 'tommyYoutubeCard';
+                      card.innerHTML = `
+                        <div class="tommyYoutubeCardTop"><span class="tommyYoutubeDot">▶</span><span>YouTube</span></div>
+                        <div class="tommyYoutubeSearch">🔍 ${query.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>
+                        <div class="tommyYoutubeStatus">YouTube search results are open.</div>
+                        <button class="tommyYoutubeOpen" type="button">Open YouTube</button>
+                      `;
+                      chat.appendChild(card);
+                      card.querySelector('button')?.addEventListener('click', function() {
+                        window.location.href = 'https://www.youtube.com/results?search_query=' + encodeURIComponent(query);
+                      });
+                      chat.scrollTop = chat.scrollHeight;
+                    })();
+                """.trimIndent()
+                webView.evaluateJavascript(script, null)
+            }, 1200L)
         }
     }
 
