@@ -160,9 +160,6 @@ class MainActivity : ComponentActivity() {
 
         val result = TommySkillEngine.execute(this, skillCommand)
 
-        // Show the same ChatGPT-style YouTube card for BOTH:
-        // 1) "Open YouTube"
-        // 2) "Open YouTube and search ..."
         if (result.success && (
                 action == "youtube_search" ||
                 (action == "open_app" && target.equals("YouTube", ignoreCase = true))
@@ -193,14 +190,12 @@ class MainActivity : ComponentActivity() {
                       if (!document.getElementById('tommy-youtube-card-style')) {
                         const style = document.createElement('style');
                         style.id = 'tommy-youtube-card-style';
-                        style.textContent = `
-                          .tommyYoutubeCard { margin: 14px 0; border: 1px solid #27272a; border-radius: 18px; overflow: hidden; background: #0b0b0c; box-shadow: 0 8px 28px rgba(0,0,0,.18); }
-                          .tommyYoutubeCardTop { padding: 14px 16px; display:flex; align-items:center; gap:10px; color:#fff; font-weight:700; }
-                          .tommyYoutubeDot { width:28px; height:28px; border-radius:9px; display:grid; place-items:center; background:#ff0000; color:#fff; font-size:14px; }
-                          .tommyYoutubeSearch { margin:0 14px 14px; padding:12px 14px; border-radius:12px; background:#171719; color:#f4f4f5; font-size:14px; }
-                          .tommyYoutubeStatus { padding:0 16px 16px; color:#a1a1aa; font-size:13px; }
-                          .tommyYoutubeOpen { margin:0 14px 14px; width:calc(100% - 28px); border:0; border-radius:12px; padding:11px 14px; background:#fff; color:#111; font-weight:700; cursor:pointer; }
-                        `;
+                        style.textContent = '.tommyYoutubeCard { margin: 14px 0; border: 1px solid #27272a; border-radius: 18px; overflow: hidden; background: #0b0b0c; box-shadow: 0 8px 28px rgba(0,0,0,.18); }' +
+                          '.tommyYoutubeCardTop { padding: 14px 16px; display:flex; align-items:center; gap:10px; color:#fff; font-weight:700; }' +
+                          '.tommyYoutubeDot { width:28px; height:28px; border-radius:9px; display:grid; place-items:center; background:#ff0000; color:#fff; font-size:14px; }' +
+                          '.tommyYoutubeSearch { margin:0 14px 14px; padding:12px 14px; border-radius:12px; background:#171719; color:#f4f4f5; font-size:14px; }' +
+                          '.tommyYoutubeStatus { padding:0 16px 16px; color:#a1a1aa; font-size:13px; }' +
+                          '.tommyYoutubeOpen { margin:0 14px 14px; width:calc(100% - 28px); border:0; border-radius:12px; padding:11px 14px; background:#fff; color:#111; font-weight:700; cursor:pointer; }';
                         document.head.appendChild(style);
                       }
 
@@ -209,12 +204,16 @@ class MainActivity : ComponentActivity() {
                       const card = document.createElement('div');
                       card.id = 'tommy-youtube-card';
                       card.className = 'tommyYoutubeCard';
-                      card.innerHTML = `
-                        <div class="tommyYoutubeCardTop"><span class="tommyYoutubeDot">▶</span><span>YouTube</span></div>
-                        ${hasQuery ? `<div class="tommyYoutubeSearch">🔍 ${safeText}</div>` : `<div class="tommyYoutubeSearch">▶ YouTube is ready</div>`}
-                        <div class="tommyYoutubeStatus">${hasQuery ? 'YouTube search results are open.' : 'YouTube is open.'}</div>
-                        <button class="tommyYoutubeOpen" type="button">${hasQuery ? 'Open YouTube results' : 'Open YouTube'}</button>
-                      `;
+                      const searchMarkup = hasQuery
+                        ? '<div class="tommyYoutubeSearch">🔍 ' + safeText + '</div>'
+                        : '<div class="tommyYoutubeSearch">▶ YouTube is ready</div>';
+                      const statusText = hasQuery ? 'YouTube search results are open.' : 'YouTube is open.';
+                      const buttonText = hasQuery ? 'Open YouTube results' : 'Open YouTube';
+                      card.innerHTML =
+                        '<div class="tommyYoutubeCardTop"><span class="tommyYoutubeDot">▶</span><span>YouTube</span></div>' +
+                        searchMarkup +
+                        '<div class="tommyYoutubeStatus">' + statusText + '</div>' +
+                        '<button class="tommyYoutubeOpen" type="button">' + buttonText + '</button>';
                       chat.appendChild(card);
                       card.querySelector('button')?.addEventListener('click', function() {
                         window.location.href = hasQuery
