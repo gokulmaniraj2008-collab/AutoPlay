@@ -15,7 +15,10 @@ object TommySkillRegistry {
     @Synchronized
     fun initialize() {
         if (initialized) return
+
         register(HelpSkill())
+        register(InstagramSkill())
+
         initialized = true
     }
 
