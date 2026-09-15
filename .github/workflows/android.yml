@@ -46,20 +46,19 @@ jobs:
       - name: Install Android SDK packages
         working-directory: .
         run: |
-          sdkmanager "platform-tools" "platforms;android-36"
+          sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
 
-      - name: Install Gradle 9.6.0
-        working-directory: .
-        run: |
-          curl -fsSL https://services.gradle.org/distributions/gradle-9.6.0-bin.zip -o /tmp/gradle.zip
-          unzip -q /tmp/gradle.zip -d /tmp
-          echo "/tmp/gradle-9.6.0/bin" >> "$GITHUB_PATH"
+      - name: Verify Gradle wrapper
+        run: ./gradlew --version
 
-      - name: Verify Gradle
-        run: gradle --version
+      - name: Clean Android build
+        run: ./gradlew clean --no-daemon --stacktrace
 
       - name: Build debug APK
-        run: gradle :app:assembleDebug --stacktrace --no-daemon -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8"
+        run: ./gradlew :app:assembleDebug --stacktrace --no-daemon -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8"
+
+      - name: Verify debug APK exists
+        run: test -s app/build/outputs/apk/debug/app-debug.apk
 
       - name: Upload debug APK artifact
         uses: actions/upload-artifact@v4
