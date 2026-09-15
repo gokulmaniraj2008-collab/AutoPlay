@@ -1,4 +1,5 @@
 import './globals.css';
+import './white-theme.css';
 
 export const metadata = {
   title: 'Tommy AI',
