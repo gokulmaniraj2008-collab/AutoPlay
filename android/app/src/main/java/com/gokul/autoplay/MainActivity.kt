@@ -38,8 +38,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -130,11 +130,6 @@ class MainActivity : ComponentActivity() {
         TommyScreenCaptureService.stop(this)
         screenVisionEnabled = false
         Toast.makeText(this, "Tommy screen vision is OFF", Toast.LENGTH_SHORT).show()
-    }
-
-    override fun onDestroy() {
-        if (screenVisionEnabled) TommyScreenCaptureService.stop(this)
-        super.onDestroy()
     }
 
     private fun defaultTommyStatusText(status: String): String = when (status) {
