@@ -1,10 +1,10 @@
 package com.gokul.autoplay
 
 import android.accessibilityservice.AccessibilityService
-import android.graphics.Rect
 import android.view.accessibility.AccessibilityNodeInfo
 import android.view.accessibility.AccessibilityEvent
 import android.os.Bundle
+import android.text.InputType
 
 class TommyAccessibilityService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent?) = Unit
@@ -42,13 +42,65 @@ class TommyAccessibilityService : AccessibilityService() {
         }
     }
 
+    private fun sendChatGPTMessageInternal(message: String): Boolean {
+        val root = rootInActiveWindow ?: return false
+        val packageName = root.packageName?.toString().orEmpty()
+        if (packageName != "com.openai.chatgpt") return false
+
+        val input = findChatInput(root) ?: return false
+        if (!input.performAction(AccessibilityNodeInfo.ACTION_FOCUS)) return false
+        val args = Bundle().apply {
+            putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, message)
+        }
+        val typed = input.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
+        if (!typed) return false
+
+        Thread.sleep(250L)
+        return clickSendButton(rootInActiveWindow ?: root)
+    }
+
+    private fun findChatInput(root: AccessibilityNodeInfo): AccessibilityNodeInfo? {
+        val queue = ArrayDeque<AccessibilityNodeInfo>()
+        queue.add(root)
+        while (queue.isNotEmpty()) {
+            val node = queue.removeFirst()
+            val className = node.className?.toString().orEmpty()
+            val text = node.text?.toString().orEmpty()
+            val hint = node.hintText?.toString().orEmpty()
+            if (node.isEditable ||
+                className.contains("EditText", ignoreCase = true) ||
+                text.contains("message", ignoreCase = true) ||
+                hint.contains("message", ignoreCase = true) ||
+                hint.contains("ask", ignoreCase = true)) {
+                return node
+            }
+            for (i in 0 until node.childCount) node.getChild(i)?.let(queue::add)
+        }
+        return null
+    }
+
+    private fun clickSendButton(root: AccessibilityNodeInfo): Boolean {
+        val labels = listOf("Send", "send")
+        for (label in labels) {
+            val nodes = root.findAccessibilityNodeInfosByText(label)
+            for (node in nodes) if (clickNodeOrParent(node)) return true
+        }
+        val queue = ArrayDeque<AccessibilityNodeInfo>()
+        queue.add(root)
+        while (queue.isNotEmpty()) {
+            val node = queue.removeFirst()
+            val description = node.contentDescription?.toString().orEmpty()
+            if (description.contains("send", ignoreCase = true) && clickNodeOrParent(node)) return true
+            for (i in 0 until node.childCount) node.getChild(i)?.let(queue::add)
+        }
+        return false
+    }
+
     private fun findAndClickAny(vararg labels: String): Boolean {
         val root = rootInActiveWindow ?: return false
         for (label in labels) {
             val nodes = root.findAccessibilityNodeInfosByText(label)
-            for (node in nodes) {
-                if (clickNodeOrParent(node)) return true
-            }
+            for (node in nodes) if (clickNodeOrParent(node)) return true
         }
         return false
     }
@@ -94,5 +146,6 @@ class TommyAccessibilityService : AccessibilityService() {
 
         fun requestRecentApps() { instance?.openRecentAppsInternal() }
         fun performTommyAction(action: String): Boolean = instance?.performTommyActionInternal(action) == true
+        fun sendChatGPTMessage(message: String): Boolean = instance?.sendChatGPTMessageInternal(message) == true
     }
 }
