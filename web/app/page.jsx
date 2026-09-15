@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
-import { Menu, X, Mic, MicOff, Send, Power, ChevronUp, Search, Music2, CheckCircle2, Loader2, Wifi, Mail, LockKeyhole, UserPlus, LogIn, LogOut, Image, Library, Folder, Clock3, Puzzle, Pencil, Plus, Sparkles } from 'lucide-react';
+import { Menu, X, Mic, MicOff, Send, Power, ChevronUp, Search, Music2, CheckCircle2, Loader2, Wifi, Mail, LockKeyhole, UserPlus, LogIn, LogOut, Library, Folder, Clock3, Puzzle, Pencil, Plus, Sparkles, Trash2 } from 'lucide-react';
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://bqrpgtxtmatxwtdpuoyh.supabase.co';
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
@@ -72,6 +72,11 @@ async function listChatSessions(userId) {
   return data || [];
 }
 
+async function deleteChatSession(userId, sessionId) {
+  const { error } = await supabase.from('tommy_chat_sessions').delete().eq('id', sessionId).eq('user_id', userId);
+  if (error) throw error;
+}
+
 function AuthScreen() {
   const [mode, setMode] = useState('login');
   const [email, setEmail] = useState('');
@@ -128,10 +133,42 @@ function AuthScreen() {
   );
 }
 
-function TommyMenu({ open, close, recentChats, onOpenChat, onNewChat }) {
+function TommyMenu({ open, close, recentChats, onOpenChat, onNewChat, onDeleteChat }) {
+  const [deleteChatId, setDeleteChatId] = useState(null);
+  const longPressTimer = useRef(null);
+
+  const clearLongPress = () => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  };
+
+  const startLongPress = (id) => {
+    clearLongPress();
+    longPressTimer.current = setTimeout(() => {
+      setDeleteChatId(id);
+      longPressTimer.current = null;
+    }, 550);
+  };
+
+  const handleOpen = (id) => {
+    clearLongPress();
+    if (deleteChatId === id) return;
+    onOpenChat(id);
+  };
+
+  const handleDelete = async (id) => {
+    clearLongPress();
+    setDeleteChatId(null);
+    await onDeleteChat(id);
+  };
+
+  useEffect(() => () => clearLongPress(), []);
+
   return (
     <>
-      <div className={open ? 'menuOverlay open' : 'menuOverlay'} onClick={close} />
+      <div className={open ? 'menuOverlay open' : 'menuOverlay'} onClick={() => { setDeleteChatId(null); close(); }} />
       <aside className={open ? 'sideMenu open' : 'sideMenu'} aria-hidden={!open}>
         <div className="sideTop">
           <div className="sideTitle"><div className="sideLogo">T</div><b>Tommy</b></div>
@@ -148,7 +185,32 @@ function TommyMenu({ open, close, recentChats, onOpenChat, onNewChat }) {
         <div className="sideDivider" />
         <div className="sideRecentHeader"><span>Recent chats</span><button onClick={onNewChat} title="New chat"><Pencil size={18}/></button></div>
         <div className="sideRecent">
-          {recentChats.length ? recentChats.map((chat, i) => <button className={i === 0 ? 'recentItem active' : 'recentItem'} key={chat.id} onClick={() => onOpenChat(chat.id)}>{chat.title}</button>) : <div className="recentEmpty">No chats yet</div>}
+          {recentChats.length ? recentChats.map((chat, i) => (
+            <div
+              className={i === 0 ? 'recentChatRow active' : 'recentChatRow'}
+              key={chat.id}
+              onPointerDown={() => startLongPress(chat.id)}
+              onPointerUp={clearLongPress}
+              onPointerLeave={clearLongPress}
+              onPointerCancel={clearLongPress}
+              onContextMenu={(e) => e.preventDefault()}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  handleOpen(chat.id);
+                }
+              }}
+            >
+              <span className="recentItem" onClick={() => handleOpen(chat.id)}>{chat.title}</span>
+              {deleteChatId === chat.id && (
+                <button className="chatDeleteButton" onClick={(e) => { e.stopPropagation(); handleDelete(chat.id); }} title="Delete chat" aria-label={`Delete ${chat.title}`}>
+                  <Trash2 size={17}/>
+                </button>
+              )}
+            </div>
+          )) : <div className="recentEmpty">No chats yet</div>}
           {recentChats.length > 0 && <button className="seeAll" onClick={close}>See all…</button>}
         </div>
         <div className="sideBottom">
@@ -221,6 +283,31 @@ export default function HomePage() {
     }
   };
 
+  const deleteChat = async (id) => {
+    if (!session?.user?.id) return;
+    try {
+      const deletingCurrent = id === chatSessionId;
+      await deleteChatSession(session.user.id, id);
+      const remaining = await listChatSessions(session.user.id);
+      setRecentChats(remaining);
+      if (deletingCurrent) {
+        if (remaining[0]) {
+          const loaded = await loadChatMessages(remaining[0].id);
+          setChatSessionId(remaining[0].id);
+          setMessages(loaded.length ? loaded : [{ from: 'tommy', text: 'This chat is empty. How can I help?', status: 'done' }]);
+        } else {
+          const chat = await createChatSession(session.user.id);
+          await saveChatMessage(chat.id, session.user.id, 'tommy', 'New Tommy chat started. How can I help?', 'done');
+          setChatSessionId(chat.id);
+          setMessages([{ from: 'tommy', text: 'New Tommy chat started. How can I help?', status: 'done' }]);
+          setRecentChats(await listChatSessions(session.user.id));
+        }
+      }
+    } catch (e) {
+      add('tommy', `Could not delete chat: ${e.message}`, 'done');
+    }
+  };
+
   const startVoice = () => {
     if (!on || processing) return;
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -236,10 +323,9 @@ export default function HomePage() {
     if (!session?.user?.id || !chatSessionId) return;
     setProcessing(true);
     add('user', q, 'done');
-    let userRow = null;
     let tommyRow = null;
     try {
-      userRow = await saveChatMessage(chatSessionId, session.user.id, 'user', q, 'done');
+      await saveChatMessage(chatSessionId, session.user.id, 'user', q, 'done');
       add('tommy', 'Thinking with Gemini…', 'processing');
       tommyRow = await saveChatMessage(chatSessionId, session.user.id, 'tommy', 'Thinking with Gemini…', 'processing');
       const ai = await askGemini(q);
@@ -291,7 +377,7 @@ export default function HomePage() {
 
   return (
     <div className="app">
-      <TommyMenu open={menuOpen} close={() => setMenuOpen(false)} recentChats={recentChats} onOpenChat={openChat} onNewChat={newChat} />
+      <TommyMenu open={menuOpen} close={() => setMenuOpen(false)} recentChats={recentChats} onOpenChat={openChat} onNewChat={newChat} onDeleteChat={deleteChat} />
       <header>
         <div className="headerLeft"><button className="menuButton" onClick={() => setMenuOpen(true)} aria-label="Open Tommy menu"><Menu size={22}/></button><div className="brand"><div className="logo">T</div><div><b>Tommy</b><span>AI Assistant</span></div></div></div>
         <div className="headerRight">
