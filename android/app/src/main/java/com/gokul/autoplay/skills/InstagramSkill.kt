@@ -31,25 +31,28 @@ class InstagramSkill : TommySkill {
     override fun execute(context: Context, command: String): TommySkillResult {
         val normalized = normalize(command)
 
+        // Specific actions must win over the generic "reel" matcher.
+        // Example: "like this reel" must LIKE the current reel, not reopen Reels.
         return when {
-            isOpenCommand(normalized) && !containsAction(normalized) -> openInstagram(context)
-            normalized.contains("reel") || normalized.contains("reels") -> executeReelAction(normalized)
-            normalized.contains("like") -> executeAccessibilityAction("LIKE_REEL", "LIKED_REEL", "Liked this Reel.")
-            normalized.contains("follow") -> executeAccessibilityAction("FOLLOW_ACCOUNT", "FOLLOW_ACCOUNT", "Following this account.")
-            normalized.contains("comment") -> executeAccessibilityAction("OPEN_COMMENTS", "OPEN_COMMENTS", "Opening comments.")
-            else -> openInstagram(context)
-        }
-    }
+            normalized.contains("like") ->
+                executeAccessibilityAction("LIKE_REEL", "LIKE_REEL", "Liking this Reel.")
 
-    private fun executeReelAction(command: String): TommySkillResult {
-        return when {
-            command.containsAny("scroll", "swipe", "next") ->
+            normalized.contains("follow") ->
+                executeAccessibilityAction("FOLLOW_ACCOUNT", "FOLLOW_ACCOUNT", "Following this account.")
+
+            normalized.contains("comment") ->
+                executeAccessibilityAction("OPEN_COMMENTS", "OPEN_COMMENTS", "Opening comments.")
+
+            normalized.containsAny("scroll", "swipe", "next") &&
+                normalized.containsAny("reel", "reels") ->
                 executeAccessibilityAction("SCROLL_REEL", "SCROLL_REEL", "Scrolling to the next Reel.")
 
-            command.containsAny("open", "show", "go", "page", "reel", "reels") ->
+            normalized.containsAny("reel", "reels") ->
                 executeAccessibilityAction("OPEN_INSTAGRAM_REELS", "OPEN_INSTAGRAM_REELS", "Opening Instagram Reels.")
 
-            else -> executeAccessibilityAction("OPEN_INSTAGRAM_REELS", "OPEN_INSTAGRAM_REELS", "Opening Instagram Reels.")
+            isOpenCommand(normalized) -> openInstagram(context)
+
+            else -> openInstagram(context)
         }
     }
 
@@ -88,9 +91,6 @@ class InstagramSkill : TommySkill {
             )
         }
     }
-
-    private fun containsAction(command: String): Boolean =
-        command.containsAny("reel", "reels", "scroll", "swipe", "next", "like", "follow", "comment", "comments")
 
     private fun isOpenCommand(command: String): Boolean =
         command.containsAny("open", "start", "launch")
