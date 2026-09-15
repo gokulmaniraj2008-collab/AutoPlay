@@ -2,7 +2,7 @@ package com.gokul.autoplay
 
 import android.content.Context
 import android.content.Intent
-import java.time.Instant
+import com.gokul.autoplay.skills.TommySkillEngine
 import java.time.ZoneId
 
 /** A command Tommy should execute locally at a specific time. */
@@ -86,7 +86,6 @@ class TommyScheduledCommandService : android.app.Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val command = intent?.getStringExtra("command").orEmpty()
-        val id = intent?.getStringExtra("command_id").orEmpty()
         startForeground(
             7201,
             android.app.Notification.Builder(this, "tommy_scheduled_commands")
@@ -100,13 +99,21 @@ class TommyScheduledCommandService : android.app.Service() {
         if (command.isNotBlank()) {
             Thread {
                 val result = TommySkillEngine.execute(this, command)
-                TommyStatusEvents.post(this, TommyStatusEvents.MESSAGE, "Scheduled: ${result.message}")
+                sendStatus(result.message)
                 stopSelfResult(startId)
             }.start()
         } else {
             stopSelfResult(startId)
         }
         return START_NOT_STICKY
+    }
+
+    private fun sendStatus(message: String) {
+        sendBroadcast(Intent(TommyStatusEvents.ACTION).apply {
+            setPackage(packageName)
+            putExtra(TommyStatusEvents.EXTRA_STATUS, TommyStatusEvents.MESSAGE)
+            putExtra(TommyStatusEvents.EXTRA_TEXT, "Scheduled: $message")
+        })
     }
 
     override fun onBind(intent: Intent?) = null
