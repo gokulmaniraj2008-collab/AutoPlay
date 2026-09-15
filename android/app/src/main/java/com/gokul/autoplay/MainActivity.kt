@@ -33,6 +33,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import org.json.JSONObject
+import java.net.HttpURLConnection
+import java.net.URL
 import java.util.Locale
 
 class MainActivity : ComponentActivity() {
@@ -40,7 +43,8 @@ class MainActivity : ComponentActivity() {
     private var tommyReady by mutableStateOf(false)
     private var voiceListening by mutableStateOf(false)
     private var voiceStatus by mutableStateOf("Tap the mic to speak")
-    private var voiceText by mutableStateOf("")
+    private var input by mutableStateOf("")
+    private var geminiBusy by mutableStateOf(false)
     private var speechRecognizer: SpeechRecognizer? = null
 
     private val requestMicPermission = registerForActivityResult(
@@ -63,8 +67,11 @@ class MainActivity : ComponentActivity() {
                     onBack = { stopVoiceRecognition(); page = 1 },
                     voiceListening = voiceListening,
                     voiceStatus = voiceStatus,
-                    voiceText = voiceText,
-                    onMic = ::toggleVoiceRecognition
+                    input = input,
+                    geminiBusy = geminiBusy,
+                    onInputChange = { input = it },
+                    onMic = ::toggleVoiceRecognition,
+                    onSend = ::sendToGemini
                 )
             }
         }
@@ -118,7 +125,7 @@ class MainActivity : ComponentActivity() {
                         ?.trim()
                         .orEmpty()
                     if (spoken.isNotEmpty()) {
-                        voiceText = spoken
+                        input = spoken
                         voiceStatus = "Voice text ready"
                     } else {
                         voiceStatus = "No words detected"
@@ -130,7 +137,7 @@ class MainActivity : ComponentActivity() {
                         ?.firstOrNull()
                         ?.trim()
                         .orEmpty()
-                    if (spoken.isNotEmpty()) voiceText = spoken
+                    if (spoken.isNotEmpty()) input = spoken
                 }
                 override fun onEvent(eventType: Int, params: Bundle?) = Unit
             })
@@ -153,6 +160,57 @@ class MainActivity : ComponentActivity() {
         if (voiceStatus == "Listening…" || voiceStatus == "Processing…") {
             voiceStatus = "Tap the mic to speak"
         }
+    }
+
+    private fun sendToGemini(messages: MutableList<String>) {
+        val text = input.trim()
+        if (text.isEmpty() || geminiBusy) return
+
+        messages.add("You: $text")
+        input = ""
+        voiceStatus = "Tommy is thinking…"
+        geminiBusy = true
+
+        Thread {
+            try {
+                val connection = (URL("https://auto-play-4qkv.vercel.app/api/tommy-gemini").openConnection() as HttpURLConnection).apply {
+                    requestMethod = "POST"
+                    connectTimeout = 10000
+                    readTimeout = 20000
+                    doOutput = true
+                    setRequestProperty("Content-Type", "application/json")
+                }
+                val body = JSONObject().put("text", text).toString()
+                connection.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
+                val responseText = (if (connection.responseCode in 200..299) connection.inputStream else connection.errorStream)
+                    ?.bufferedReader()
+                    ?.use { it.readText() }
+                    .orEmpty()
+                val responseCode = connection.responseCode
+                connection.disconnect()
+
+                runOnUiThread {
+                    geminiBusy = false
+                    if (responseCode in 200..299) {
+                        val json = JSONObject(responseText)
+                        val reply = json.optString("reply").ifBlank { "I understood: $text" }
+                        val action = json.optString("action").ifBlank { "none" }
+                        messages.add("Tommy: $reply")
+                        messages.add("Action: $action")
+                        voiceStatus = "Gemini ready"
+                    } else {
+                        messages.add("Tommy: Gemini request failed. Check the server and internet connection.")
+                        voiceStatus = "Gemini unavailable"
+                    }
+                }
+            } catch (error: Exception) {
+                runOnUiThread {
+                    geminiBusy = false
+                    messages.add("Tommy: I couldn't reach Gemini right now.")
+                    voiceStatus = "Gemini unavailable"
+                }
+            }
+        }.start()
     }
 
     override fun onDestroy() {
@@ -178,7 +236,6 @@ private fun Page1TommyHome(
             ) {
                 Text("TOMMY", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.ExtraBold)
                 Text("Your personal Android AI assistant", color = MaterialTheme.colorScheme.onSurfaceVariant)
-
                 Card(Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Text(
@@ -188,9 +245,9 @@ private fun Page1TommyHome(
                         )
                         Text(
                             text = if (tommyReady) {
-                                "Page 1 is ready. Feature 2 voice input is now added separately."
+                                "Page 1 is ready. Feature 3 Gemini command understanding is now added."
                             } else {
-                                "Clean starter build. Voice input is available from Tommy Chat."
+                                "Clean starter build. Tommy Chat now includes voice input and Gemini understanding."
                             }
                         )
                         Button(onClick = onStart, modifier = Modifier.fillMaxWidth()) {
@@ -198,11 +255,7 @@ private fun Page1TommyHome(
                         }
                     }
                 }
-
-                Button(onClick = onChat, modifier = Modifier.fillMaxWidth()) {
-                    Text("Open Tommy Chat")
-                }
-
+                Button(onClick = onChat, modifier = Modifier.fillMaxWidth()) { Text("Open Tommy Chat") }
                 Card(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(18.dp)) {
                         Text("PAGE 1", fontWeight = FontWeight.Bold)
@@ -220,13 +273,15 @@ private fun Page2TommyChat(
     onBack: () -> Unit,
     voiceListening: Boolean,
     voiceStatus: String,
-    voiceText: String,
-    onMic: () -> Unit
+    input: String,
+    geminiBusy: Boolean,
+    onInputChange: (String) -> Unit,
+    onMic: () -> Unit,
+    onSend: (MutableList<String>) -> Unit
 ) {
     val messages = androidx.compose.runtime.remember {
-        mutableStateListOf("Tommy: Chat is ready. Feature 2 adds voice-to-text input.")
+        mutableStateListOf("Tommy: Chat is ready. Feature 3 adds Gemini command understanding.")
     }
-    var input by androidx.compose.runtime.remember { mutableStateOf("") }
 
     MaterialTheme {
         Surface(Modifier.fillMaxSize()) {
@@ -241,7 +296,6 @@ private fun Page2TommyChat(
                     Text("Tommy Chat", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
                     Button(onClick = onBack) { Text("Back") }
                 }
-
                 LazyColumn(
                     modifier = Modifier.weight(1f).fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -250,33 +304,20 @@ private fun Page2TommyChat(
                         Card(Modifier.fillMaxWidth()) { Text(message, Modifier.padding(14.dp)) }
                     }
                 }
-
                 Text(
-                    text = if (voiceText.isNotBlank()) "$voiceStatus: $voiceText" else voiceStatus,
+                    text = if (geminiBusy) "Tommy is thinking with Gemini…" else voiceStatus,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(
-                        value = if (voiceText.isNotBlank()) voiceText else input,
-                        onValueChange = {
-                            input = it
-                            voiceText = it
-                        },
+                        value = input,
+                        onValueChange = onInputChange,
                         modifier = Modifier.weight(1f),
                         placeholder = { Text("Type to Tommy…") },
                         singleLine = true
                     )
-                    Button(onClick = onMic) { Text(if (voiceListening) "Stop" else "🎤") }
-                    Button(onClick = {
-                        val text = (if (voiceText.isNotBlank()) voiceText else input).trim()
-                        if (text.isNotEmpty()) {
-                            messages.add("You: $text")
-                            messages.add("Tommy: I received your message: $text")
-                            input = ""
-                            voiceText = ""
-                        }
-                    }) { Text("Send") }
+                    Button(onClick = onMic, enabled = !geminiBusy) { Text(if (voiceListening) "Stop" else "🎤") }
+                    Button(onClick = { onSend(messages) }, enabled = !geminiBusy) { Text("Send") }
                 }
             }
         }
