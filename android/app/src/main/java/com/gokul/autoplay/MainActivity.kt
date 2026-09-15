@@ -3,8 +3,12 @@ package com.gokul.autoplay
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.webkit.ClientCertRequest
 import android.webkit.PermissionRequest
+import android.webkit.SslErrorHandler
 import android.webkit.WebChromeClient
+import android.webkit.WebResourceError
+import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -18,6 +22,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var webView: WebView
     private var pendingWebPermissionRequest: PermissionRequest? = null
     private var supabaseBridge: SupabaseTommyBridge? = null
+    private var pageRetryUsed = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -28,13 +33,40 @@ class MainActivity : ComponentActivity() {
                 javaScriptEnabled = true
                 domStorageEnabled = true
                 databaseEnabled = true
-                cacheMode = WebSettings.LOAD_DEFAULT
+                cacheMode = WebSettings.LOAD_NO_CACHE
                 mediaPlaybackRequiresUserGesture = false
                 allowFileAccess = false
                 allowContentAccess = false
             }
 
-            webViewClient = WebViewClient()
+            // Do not reuse a cached Vercel 404/deployment response.
+            clearCache(false)
+
+            webViewClient = object : WebViewClient() {
+                override fun onReceivedError(
+                    view: WebView,
+                    request: WebResourceRequest,
+                    error: WebResourceError
+                ) {
+                    super.onReceivedError(view, request, error)
+                    if (request.isForMainFrame && !pageRetryUsed) {
+                        pageRetryUsed = true
+                        view.postDelayed({
+                            view.loadUrl(buildTommyUrl(retry = true))
+                        }, 500L)
+                    }
+                }
+
+                override fun onReceivedSslError(
+                    view: WebView,
+                    handler: SslErrorHandler,
+                    error: android.net.http.SslError
+                ) {
+                    // Never bypass TLS validation.
+                    handler.cancel()
+                }
+            }
+
             webChromeClient = object : WebChromeClient() {
                 override fun onPermissionRequest(request: PermissionRequest) {
                     runOnUiThread {
@@ -64,11 +96,17 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            loadUrl(TOMMY_WEB_URL)
+            loadUrl(buildTommyUrl(retry = false))
         }
 
         startTommyWebBridge()
         setContentView(webView)
+    }
+
+    private fun buildTommyUrl(retry: Boolean): String {
+        val separator = if (TOMMY_WEB_URL.contains("?")) "&" else "?"
+        val attempt = if (retry) "2" else "1"
+        return "$TOMMY_WEB_URL${separator}android=1&attempt=$attempt&t=${System.currentTimeMillis()}"
     }
 
     private fun startTommyWebBridge() {
