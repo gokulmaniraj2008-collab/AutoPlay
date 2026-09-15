@@ -22,6 +22,7 @@ object TommySkillRegistry {
         register(WebSearchSkill())
         register(SpotifySkill())
         register(DeviceControlSkill())
+        register(ChatGPTSkill())
 
         initialized = true
     }
@@ -33,9 +34,7 @@ object TommySkillRegistry {
     }
 
     @Synchronized
-    fun unregister(skillId: String) {
-        skills.remove(skillId)
-    }
+    fun unregister(skillId: String) { skills.remove(skillId) }
 
     @Synchronized
     fun all(): List<TommySkill> = skills.values.toList()
@@ -44,44 +43,29 @@ object TommySkillRegistry {
     fun find(command: String): TommySkill? {
         val normalized = command.trim()
         if (normalized.isBlank()) return null
-        return skills.values.firstOrNull { skill ->
-            runCatching { skill.canHandle(normalized) }.getOrDefault(false)
-        }
+        return skills.values.firstOrNull { skill -> runCatching { skill.canHandle(normalized) }.getOrDefault(false) }
     }
 
     fun execute(context: Context, command: String): TommySkillResult {
         initialize()
-        val skill = find(command)
-            ?: return TommySkillResult.failure(
-                skillId = "system",
-                message = "I received: \"$command\". I don't have a skill for that yet."
-            )
-
-        return runCatching { skill.execute(context, command) }
-            .getOrElse { error ->
-                TommySkillResult.failure(
-                    skillId = skill.id,
-                    message = "${skill.name} couldn't complete that command: ${error.message ?: "unknown error"}"
-                )
-            }
+        val skill = find(command) ?: return TommySkillResult.failure("system", "I received: \"$command\". I don't have a skill for that yet.")
+        return runCatching { skill.execute(context, command) }.getOrElse { error ->
+            TommySkillResult.failure(skill.id, "${skill.name} couldn't complete that command: ${error.message ?: "unknown error"}")
+        }
     }
 }
 
-/** First built-in skill proves the registry works without changing existing commands. */
 private class HelpSkill : TommySkill {
     override val id = "system.help"
     override val name = "Tommy Help"
     override val description = "Explains the commands Tommy currently supports."
-
     override fun canHandle(command: String): Boolean {
         val normalized = command.lowercase().trim()
         return normalized == "help" || normalized == "what can you do" || normalized == "commands"
     }
-
-    override fun execute(context: Context, command: String): TommySkillResult =
-        TommySkillResult.success(
-            skillId = id,
-            action = "SHOW_HELP",
-            message = "Try: Open Instagram, go to Reels, scroll, like, follow, open comments, open YouTube, Google, WhatsApp, search Google, or search Spotify."
-        )
+    override fun execute(context: Context, command: String): TommySkillResult = TommySkillResult.success(
+        skillId = id,
+        action = "SHOW_HELP",
+        message = "Try: Open Instagram, go to Reels, scroll, like, follow, open comments, open YouTube, Google, WhatsApp, search Google, search Spotify, or send a message to ChatGPT."
+    )
 }
