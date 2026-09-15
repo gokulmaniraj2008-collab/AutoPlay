@@ -223,33 +223,57 @@ private fun HomePage(
     onScreenVision: () -> Unit,
     onStopScreenVision: () -> Unit
 ) {
-    Column(Modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        Text("AutoPlay", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
-        Text("Your music. Your commands. Automatically.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
-            Column(Modifier.padding(20.dp)) {
-                Text("READY TO PLAY", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(8.dp))
-                Text("Seven app pages", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                Text("Commands, automation, background mode, voice, floating Tommy and chat.")
-            }
-        }
-        Button(onClick = onPages, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) { Text("Open Pages 2–7") }
-        OutlinedButton(onClick = onTommy, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) { Text("Start Tommy") }
-        Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp)) {
-            Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("👀 SCREEN VISION", fontWeight = FontWeight.Bold)
-                Text(
-                    if (screenVisionEnabled) "Tommy is capturing the screen. Gemini Vision will use these frames in the next step."
-                    else "Let Tommy capture the current screen after you approve Android's screen-sharing permission.",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                if (screenVisionEnabled) {
-                    OutlinedButton(onClick = onStopScreenVision, modifier = Modifier.fillMaxWidth()) { Text("Stop Screen Vision") }
-                } else {
-                    Button(onClick = onScreenVision, modifier = Modifier.fillMaxWidth()) { Text("Enable Screen Vision") }
+    Column(
+        Modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Text("TOMMY", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.ExtraBold)
+        Text("Your personal Android AI assistant", color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+        Card(
+            Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(28.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+        ) {
+            Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("●", style = MaterialTheme.typography.displaySmall)
+                Text("Hey, I'm Tommy", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                Text("Tell me what you want to do. I can open apps, search, control supported actions and report the result here.")
+                Button(
+                    onClick = onTommy,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp)
+                ) {
+                    Text("Start Tommy")
                 }
             }
+        }
+
+        Card(
+            Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(22.dp)
+        ) {
+            Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("TOMMY STATUS", fontWeight = FontWeight.Bold)
+                Text("Use the microphone or Chat page to give Tommy a command.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Live status appears in the bar below.", style = MaterialTheme.typography.labelLarge)
+            }
+        }
+
+        Button(
+            onClick = { onPages() },
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Text("Open Tommy Pages")
+        }
+
+        OutlinedButton(
+            onClick = { },
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Text("Tommy Chat is available below")
         }
     }
 }
