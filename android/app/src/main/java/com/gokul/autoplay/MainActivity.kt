@@ -39,8 +39,6 @@ class MainActivity : ComponentActivity() {
                 mediaPlaybackRequiresUserGesture = false
                 allowFileAccess = false
                 allowContentAccess = false
-                // Match the normal Chrome mobile user agent. This avoids Vercel/CDN
-                // treating Android WebView differently from the working browser page.
                 userAgentString = "Mozilla/5.0 (Linux; Android 16; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Mobile Safari/537.36"
             }
 
@@ -204,6 +202,6 @@ class MainActivity : ComponentActivity() {
 
     companion object {
         private const val MIC_PERMISSION_REQUEST = 501
-        private const val TOMMY_WEB_URL = "https://auto-play-4qkv.vercel.app"
+        private const val TOMMY_WEB_URL = "https://auto-play.vercel.app"
     }
 }
