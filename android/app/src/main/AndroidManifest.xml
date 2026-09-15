@@ -50,5 +50,18 @@
             android:name=".TommyScreenCaptureService"
             android:exported="false"
             android:foregroundServiceType="mediaProjection" />
+
+        <receiver
+            android:name=".TommyScheduledCommandReceiver"
+            android:exported="false" />
+
+        <service
+            android:name=".TommyScheduledCommandService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="scheduled assistant command execution" />
+        </service>
     </application>
 </manifest>
