@@ -42,6 +42,36 @@ async function getCommand(id) {
   return data[0];
 }
 
+async function createChatSession(userId, title = 'New Tommy chat') {
+  const { data, error } = await supabase.from('tommy_chat_sessions').insert({ user_id: userId, title }).select().single();
+  if (error) throw error;
+  return data;
+}
+
+async function loadChatMessages(sessionId) {
+  const { data, error } = await supabase.from('tommy_chat_messages').select('id,role,text,status,created_at').eq('session_id', sessionId).order('created_at', { ascending: true });
+  if (error) throw error;
+  return (data || []).map((m) => ({ id: m.id, from: m.role, text: m.text, status: m.status }));
+}
+
+async function saveChatMessage(sessionId, userId, role, text, status = 'done') {
+  const { data, error } = await supabase.from('tommy_chat_messages').insert({ session_id: sessionId, user_id: userId, role, text, status }).select('id').single();
+  if (error) throw error;
+  await supabase.from('tommy_chat_sessions').update({ updated_at: new Date().toISOString() }).eq('id', sessionId).eq('user_id', userId);
+  return data;
+}
+
+async function updateChatMessage(id, userId, text, status = 'done') {
+  const { error } = await supabase.from('tommy_chat_messages').update({ text, status }).eq('id', id).eq('user_id', userId);
+  if (error) throw error;
+}
+
+async function listChatSessions(userId) {
+  const { data, error } = await supabase.from('tommy_chat_sessions').select('id,title,updated_at,created_at').eq('user_id', userId).order('updated_at', { ascending: false }).limit(20);
+  if (error) throw error;
+  return data || [];
+}
+
 function AuthScreen() {
   const [mode, setMode] = useState('login');
   const [email, setEmail] = useState('');
@@ -98,8 +128,7 @@ function AuthScreen() {
   );
 }
 
-function TommyMenu({ open, close, messages, onNewChat }) {
-  const recent = messages.filter((m) => m.from === 'user').slice(-6).reverse();
+function TommyMenu({ open, close, recentChats, onOpenChat, onNewChat }) {
   return (
     <>
       <div className={open ? 'menuOverlay open' : 'menuOverlay'} onClick={close} />
@@ -119,8 +148,8 @@ function TommyMenu({ open, close, messages, onNewChat }) {
         <div className="sideDivider" />
         <div className="sideRecentHeader"><span>Recent chats</span><button onClick={onNewChat} title="New chat"><Pencil size={18}/></button></div>
         <div className="sideRecent">
-          {recent.length ? recent.map((m, i) => <button className={i === 0 ? 'recentItem active' : 'recentItem'} key={`${m.text}-${i}`} onClick={close}>{m.text}</button>) : <div className="recentEmpty">No chats yet</div>}
-          <button className="seeAll" onClick={close}>See all…</button>
+          {recentChats.length ? recentChats.map((chat, i) => <button className={i === 0 ? 'recentItem active' : 'recentItem'} key={chat.id} onClick={() => onOpenChat(chat.id)}>{chat.title}</button>) : <div className="recentEmpty">No chats yet</div>}
+          {recentChats.length > 0 && <button className="seeAll" onClick={close}>See all…</button>}
         </div>
         <div className="sideBottom">
           <button className="newChat" onClick={onNewChat}><Plus size={21}/> <span>Chat</span></button>
@@ -139,6 +168,8 @@ export default function HomePage() {
   const [processing, setProcessing] = useState(false);
   const [text, setText] = useState('');
   const [messages, setMessages] = useState([{ from: 'tommy', text: 'Hi. Tommy is on. How can I help?', status: 'done' }]);
+  const [chatSessionId, setChatSessionId] = useState(null);
+  const [recentChats, setRecentChats] = useState([]);
   const rec = useRef(null);
 
   useEffect(() => {
@@ -148,7 +179,47 @@ export default function HomePage() {
     return () => { mounted = false; listener.subscription.unsubscribe(); rec.current?.stop(); };
   }, []);
 
+  useEffect(() => {
+    if (!session?.user?.id) return;
+    let cancelled = false;
+    const restoreChat = async () => {
+      try {
+        const chats = await listChatSessions(session.user.id);
+        if (cancelled) return;
+        setRecentChats(chats);
+        let active = chats[0];
+        if (!active) active = await createChatSession(session.user.id);
+        if (cancelled) return;
+        setChatSessionId(active.id);
+        const loaded = await loadChatMessages(active.id);
+        if (cancelled) return;
+        setMessages(loaded.length ? loaded : [{ from: 'tommy', text: 'Hi. Tommy is on. How can I help?', status: 'done' }]);
+        if (!loaded.length) await saveChatMessage(active.id, session.user.id, 'tommy', 'Hi. Tommy is on. How can I help?', 'done');
+        const refreshed = await listChatSessions(session.user.id);
+        if (!cancelled) setRecentChats(refreshed);
+      } catch (e) {
+        if (!cancelled) setMessages([{ from: 'tommy', text: `Chat history error: ${e.message}`, status: 'done' }]);
+      }
+    };
+    restoreChat();
+    return () => { cancelled = true; };
+  }, [session?.user?.id]);
+
   const add = (from, message, status) => setMessages((m) => [...m, { from, text: message, status }]);
+
+  const openChat = async (id) => {
+    if (!session?.user?.id || id === chatSessionId) { setMenuOpen(false); return; }
+    try {
+      setProcessing(false);
+      const loaded = await loadChatMessages(id);
+      setChatSessionId(id);
+      setMessages(loaded.length ? loaded : [{ from: 'tommy', text: 'This chat is empty. How can I help?', status: 'done' }]);
+      setText('');
+      setMenuOpen(false);
+    } catch (e) {
+      add('tommy', `Could not open chat history: ${e.message}`, 'done');
+    }
+  };
 
   const startVoice = () => {
     if (!on || processing) return;
@@ -162,36 +233,72 @@ export default function HomePage() {
   };
 
   const execute = async (q) => {
-    setProcessing(true); add('user', q, 'done'); add('tommy', 'Thinking with Gemini…', 'processing');
+    if (!session?.user?.id || !chatSessionId) return;
+    setProcessing(true);
+    add('user', q, 'done');
+    let userRow = null;
+    let tommyRow = null;
     try {
-      const ai = await askGemini(q); const row = await createCommand(ai, q);
-      setMessages((m) => m.map((x, i) => i === m.length - 1 ? { ...x, text: ai.reply || 'Command sent to Android Tommy.', status: 'processing' } : x));
+      userRow = await saveChatMessage(chatSessionId, session.user.id, 'user', q, 'done');
+      add('tommy', 'Thinking with Gemini…', 'processing');
+      tommyRow = await saveChatMessage(chatSessionId, session.user.id, 'tommy', 'Thinking with Gemini…', 'processing');
+      const ai = await askGemini(q);
+      const row = await createCommand(ai, q);
+      const thinkingText = ai.reply || 'Command sent to Android Tommy.';
+      setMessages((m) => m.map((x, i) => i === m.length - 1 ? { ...x, text: thinkingText, status: 'processing' } : x));
+      await updateChatMessage(tommyRow.id, session.user.id, thinkingText, 'processing');
       let latest = row;
       for (let i = 0; i < 30; i += 1) { await new Promise((resolve) => setTimeout(resolve, 1000)); latest = await getCommand(row.id); if (latest.status === 'done' || latest.status === 'failed') break; }
-      setMessages((m) => m.map((x, i) => i === m.length - 1 ? { ...x, text: latest.response || ai.reply || 'Tommy is waiting for Android.', status: 'done' } : x));
+      const finalText = latest.response || ai.reply || 'Tommy is waiting for Android.';
+      setMessages((m) => m.map((x, i) => i === m.length - 1 ? { ...x, text: finalText, status: 'done' } : x));
+      await updateChatMessage(tommyRow.id, session.user.id, finalText, 'done');
+      if (messages.length <= 1) {
+        await supabase.from('tommy_chat_sessions').update({ title: q.slice(0, 60), updated_at: new Date().toISOString() }).eq('id', chatSessionId).eq('user_id', session.user.id);
+      }
     } catch (e) {
-      setMessages((m) => m.map((x, i) => i === m.length - 1 ? { ...x, text: `Tommy connection error: ${e.message}`, status: 'done' } : x));
-    } finally { setProcessing(false); }
+      const errorText = `Tommy connection error: ${e.message}`;
+      setMessages((m) => m.map((x, i) => i === m.length - 1 ? { ...x, text: errorText, status: 'done' } : x));
+      if (tommyRow?.id) await updateChatMessage(tommyRow.id, session.user.id, errorText, 'done').catch(() => {});
+    } finally {
+      setProcessing(false);
+      listChatSessions(session.user.id).then(setRecentChats).catch(() => {});
+    }
   };
 
   const send = () => { const q = text.trim(); if (!q || !on) return; setText(''); execute(q); };
   const quick = (q) => setText(q);
-  const newChat = () => { setMessages([{ from: 'tommy', text: 'New Tommy chat started. How can I help?', status: 'done' }]); setText(''); setMenuOpen(false); };
-  const logout = async () => { await supabase.auth.signOut(); setOn(false); };
+
+  const newChat = async () => {
+    if (!session?.user?.id) return;
+    try {
+      const chat = await createChatSession(session.user.id);
+      await saveChatMessage(chat.id, session.user.id, 'tommy', 'New Tommy chat started. How can I help?', 'done');
+      setChatSessionId(chat.id);
+      setMessages([{ from: 'tommy', text: 'New Tommy chat started. How can I help?', status: 'done' }]);
+      setText('');
+      setMenuOpen(false);
+      setRecentChats(await listChatSessions(session.user.id));
+      setOn(true);
+    } catch (e) {
+      add('tommy', `Could not create chat: ${e.message}`, 'done');
+    }
+  };
+
+  const logout = async () => { await supabase.auth.signOut(); setOn(false); setChatSessionId(null); setRecentChats([]); };
 
   if (session === undefined) return <div className="authLoading"><div className="authLogo">T</div><Loader2 className="spin" size={20}/></div>;
   if (!session) return <AuthScreen />;
 
   return (
     <div className="app">
-      <TommyMenu open={menuOpen} close={() => setMenuOpen(false)} messages={messages} onNewChat={newChat} />
+      <TommyMenu open={menuOpen} close={() => setMenuOpen(false)} recentChats={recentChats} onOpenChat={openChat} onNewChat={newChat} />
       <header>
         <div className="headerLeft"><button className="menuButton" onClick={() => setMenuOpen(true)} aria-label="Open Tommy menu"><Menu size={22}/></button><div className="brand"><div className="logo">T</div><div><b>Tommy</b><span>AI Assistant</span></div></div></div>
         <div className="headerRight">
           <div className="connection"><Wifi size={14} /> Gemini + Supabase + Android</div>
           <span className="accountEmail">{session.user.email}</span>
           <button className="logout" onClick={logout} title="Log out"><LogOut size={16}/></button>
-          <button className={on ? 'power on' : 'power'} onClick={() => { setOn(!on); setListening(false); }}><Power size={17} />{on ? 'ON' : 'OFF'}</button>
+          <button className={on ? 'power on' : 'power'} onClick={() => { setOn(!on); setListening(false); }}>{on ? <Power size={17}/> : <Power size={17}/>} {on ? 'ON' : 'OFF'}</button>
         </div>
       </header>
       <main>
@@ -201,7 +308,7 @@ export default function HomePage() {
           <h1>{listening ? 'I’m listening…' : processing ? 'Tommy is working…' : 'What can I do for you?'}</h1>
           <p>{on ? (listening ? 'Speak your command now' : processing ? 'Gemini → Supabase → Android…' : 'Type a command or tap the microphone') : 'Tommy is off'}</p>
         </div>
-        <section className="chat">{messages.map((m, i) => <div key={i} className={`msg ${m.from}`}><div>{m.text}{m.status === 'processing' && <Loader2 className="spin" size={14}/>}</div>{m.status === 'done' && m.from === 'tommy' && <CheckCircle2 size={14} className="doneIcon"/>}</div>)}</section>
+        <section className="chat">{messages.map((m, i) => <div key={m.id || i} className={`msg ${m.from}`}><div>{m.text}{m.status === 'processing' && <Loader2 className="spin" size={14}/>}</div>{m.status === 'done' && m.from === 'tommy' && <CheckCircle2 size={14} className="doneIcon"/>}</div>)}</section>
         <div className="composer"><textarea value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }} placeholder={on ? 'Ask Tommy anything…' : 'Turn Tommy on to start'}/><button className={listening ? 'mic active' : 'mic'} onClick={startVoice} disabled={!on || processing}>{listening ? <MicOff/> : <Mic/>}</button><button className="send" onClick={send} disabled={!on || processing || !text.trim()}><Send/></button></div>
         <div className="status"><span className={on ? 'dot live' : 'dot'}/>{on ? (listening ? 'Listening' : processing ? 'Executing on Android' : 'Tommy is on') : 'Tommy is off'}</div>
         <div className="quick"><button onClick={() => quick('Open Instagram Reels')}>Instagram Reels</button><button onClick={() => quick('Open Instagram and open comments')}>Instagram Comments</button><button onClick={() => quick('Open Google and search Tamil latest movie')}><Search size={15}/> Google search</button><button onClick={() => quick('Open Spotify and search Arabic Kuthu')}><Music2 size={15}/> Spotify</button></div>
