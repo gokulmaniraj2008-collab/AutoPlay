@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -26,6 +27,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -43,8 +45,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.gokul.autoplay.skills.TommySkillEngine
+import java.net.URLEncoder
 
-private data class TommyMessage(val fromTommy: Boolean, val text: String)
+private data class TommyMessage(
+    val fromTommy: Boolean,
+    val text: String,
+    val spotifyQuery: String? = null
+)
 
 @Composable
 fun TommyChatPage() {
@@ -53,7 +60,7 @@ fun TommyChatPage() {
         mutableStateListOf(
             TommyMessage(
                 true,
-                "Hi! I'm Tommy. Try: Open Instagram, go to Reels, scroll, like, follow, open comments, YouTube, Google, or WhatsApp."
+                "Hi! I'm Tommy. Try: Open Instagram, go to Reels, scroll, like, follow, open comments, YouTube, Google, or Spotify."
             )
         )
     }
@@ -139,7 +146,6 @@ fun TommyChatPage() {
                 isListening = false
                 input = text
                 voiceStatus = "Command received"
-                // The floating service remains the single executor when it is active.
                 if (!FloatingTommyService.isRunning) {
                     sendCommand(context, messages, text)
                 }
@@ -198,7 +204,11 @@ fun TommyChatPage() {
             state = listState,
             modifier = Modifier.weight(1f).fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) { items(messages) { ChatBubble(it) } }
+        ) {
+            items(messages) { message ->
+                ChatBubble(message)
+            }
+        }
         Text(voiceStatus, color = if (isListening) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
             OutlinedTextField(
@@ -230,8 +240,23 @@ private fun sendCommand(context: Context, messages: MutableList<TommyMessage>, c
     messages.add(TommyMessage(false, command))
 
     val result = TommySkillEngine.execute(context, command)
-    val prefix = if (result.success) "Tommy: " else "Tommy: "
-    messages.add(TommyMessage(true, prefix + result.message))
+    val normalized = command.lowercase().trim()
+    val spotifyQuery = if (normalized.contains("spotify")) extractSpotifyQuery(normalized) else null
+    messages.add(
+        TommyMessage(
+            fromTommy = true,
+            text = result.message,
+            spotifyQuery = spotifyQuery?.takeIf { it.isNotBlank() }
+        )
+    )
+}
+
+private fun extractSpotifyQuery(command: String): String {
+    return command
+        .replace("spotify", "", ignoreCase = true)
+        .replace(Regex("\\b(open|search|find|play|for)\\b", RegexOption.IGNORE_CASE), "")
+        .replace(Regex("\\s+"), " ")
+        .trim()
 }
 
 @Composable
@@ -245,6 +270,67 @@ private fun ChatBubble(message: TommyMessage) {
             colors = CardDefaults.cardColors(
                 containerColor = if (message.fromTommy) Color(0xFFEFF5FF) else MaterialTheme.colorScheme.primaryContainer
             )
-        ) { Text(message.text, modifier = Modifier.padding(horizontal = 14.dp, vertical = 11.dp)) }
+        ) {
+            Text(message.text, modifier = Modifier.padding(horizontal = 14.dp, vertical = 11.dp))
+        }
+
+        if (message.fromTommy && message.spotifyQuery != null) {
+            Spacer(Modifier.height(6.dp))
+            SpotifySearchCard(message.spotifyQuery)
+        }
+    }
+}
+
+@Composable
+private fun SpotifySearchCard(query: String) {
+    val context = LocalContext.current
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF151515))
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("●", color = Color(0xFF1DB954), style = MaterialTheme.typography.headlineSmall)
+                Spacer(Modifier.width(10.dp))
+                Column {
+                    Text("Spotify", color = Color.White, fontWeight = FontWeight.Bold)
+                    Text("Search results", color = Color.LightGray)
+                }
+            }
+            Text(
+                "Search Spotify for ${query.ifBlank { "songs" }}",
+                color = Color.White,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                "Tommy can open the live Spotify results from here.",
+                color = Color.LightGray
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(
+                    onClick = {
+                        val encoded = URLEncoder.encode(query, "UTF-8")
+                        context.startActivity(
+                            Intent(Intent.ACTION_VIEW, Uri.parse("https://open.spotify.com/search/$encoded"))
+                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        )
+                    }
+                ) { Text("Open results", color = Color.White) }
+                Button(
+                    onClick = {
+                        val encoded = URLEncoder.encode(query, "UTF-8")
+                        context.startActivity(
+                            Intent(Intent.ACTION_VIEW, Uri.parse("spotify:search:$encoded"))
+                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        )
+                    }
+                ) { Text("▶ Play") }
+            }
+        }
     }
 }
