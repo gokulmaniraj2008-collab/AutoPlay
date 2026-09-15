@@ -5,7 +5,7 @@ plugins {
 
 android {
     namespace = "com.gokul.autoplay"
-    compileSdk = 36
+    compileSdk = 37
     defaultConfig {
         applicationId = "com.gokul.autoplay"
         minSdk = 26
