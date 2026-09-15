@@ -37,8 +37,22 @@ class InstagramSkill : TommySkill {
             normalized.contains("like") ->
                 executeAccessibilityAction("LIKE_REEL", "LIKE_REEL", "Liking this Reel.")
 
-            normalized.contains("follow") ->
-                executeAccessibilityAction("FOLLOW_ACCOUNT", "FOLLOW_ACCOUNT", "Following this account.")
+            normalized.contains("follow") -> {
+                val username = extractFollowUsername(normalized)
+                if (username != null) {
+                    executeAccessibilityAction(
+                        "FOLLOW_PROFILE:$username",
+                        "FOLLOW_PROFILE",
+                        "Opening @$username and following the account."
+                    )
+                } else {
+                    executeAccessibilityAction(
+                        "FOLLOW_ACCOUNT",
+                        "FOLLOW_ACCOUNT",
+                        "Following this account."
+                    )
+                }
+            }
 
             normalized.contains("comment") ->
                 executeAccessibilityAction("OPEN_COMMENTS", "OPEN_COMMENTS", "Opening comments.")
@@ -54,6 +68,21 @@ class InstagramSkill : TommySkill {
 
             else -> openInstagram(context)
         }
+    }
+
+    private fun extractFollowUsername(command: String): String? {
+        val tokens = command.split(" ").filter { it.isNotBlank() }
+        val followIndex = tokens.indexOfFirst { it == "follow" }
+        if (followIndex < 0 || followIndex + 1 >= tokens.size) return null
+
+        val candidate = tokens[followIndex + 1]
+            .removePrefix("@")
+            .trim()
+            .replace(Regex("[^a-z0-9._]"), "")
+
+        if (candidate.isBlank() || candidate in setOf("this", "the", "account", "user", "back")) return null
+        if (candidate.length > 30) return null
+        return candidate
     }
 
     private fun openInstagram(context: Context): TommySkillResult {
@@ -97,7 +126,7 @@ class InstagramSkill : TommySkill {
 
     private fun normalize(command: String): String =
         command.lowercase()
-            .replace(Regex("[^a-z0-9 ]"), " ")
+            .replace(Regex("[^a-z0-9@._ ]"), " ")
             .replace(Regex("\\s+"), " ")
             .trim()
 
