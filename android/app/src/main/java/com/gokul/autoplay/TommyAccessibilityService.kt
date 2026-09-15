@@ -4,19 +4,27 @@ import android.accessibilityservice.AccessibilityService
 import android.view.accessibility.AccessibilityNodeInfo
 import android.view.accessibility.AccessibilityEvent
 import android.os.Bundle
-import android.text.InputType
 
 class TommyAccessibilityService : AccessibilityService() {
-    override fun onAccessibilityEvent(event: AccessibilityEvent?) = Unit
+    override fun onAccessibilityEvent(event: AccessibilityEvent?) {
+        val packageName = event?.packageName?.toString()?.trim().orEmpty()
+        if (packageName.isNotBlank()) {
+            foregroundPackage = packageName
+            synchronized(foregroundLock) { foregroundLock.notifyAll() }
+        }
+    }
+
     override fun onInterrupt() = Unit
 
     override fun onServiceConnected() {
         super.onServiceConnected()
         instance = this
+        foregroundPackage = rootInActiveWindow?.packageName?.toString().orEmpty()
     }
 
     override fun onDestroy() {
         if (instance === this) instance = null
+        synchronized(foregroundLock) { foregroundLock.notifyAll() }
         super.onDestroy()
     }
 
@@ -143,9 +151,30 @@ class TommyAccessibilityService : AccessibilityService() {
 
     companion object {
         @Volatile private var instance: TommyAccessibilityService? = null
+        @Volatile private var foregroundPackage: String = ""
+        private val foregroundLock = Object()
 
         fun requestRecentApps() { instance?.openRecentAppsInternal() }
         fun performTommyAction(action: String): Boolean = instance?.performTommyActionInternal(action) == true
         fun sendChatGPTMessage(message: String): Boolean = instance?.sendChatGPTMessageInternal(message) == true
+
+        fun isServiceEnabled(): Boolean = instance != null
+
+        /** Wait for an accessibility event confirming that an app is foreground. */
+        fun waitForForegroundPackage(packageName: String, timeoutMs: Long = 3000L): Boolean {
+            if (foregroundPackage == packageName) return true
+            if (instance == null) return false
+
+            val deadline = System.currentTimeMillis() + timeoutMs
+            synchronized(foregroundLock) {
+                while (System.currentTimeMillis() < deadline) {
+                    if (foregroundPackage == packageName) return true
+                    val remaining = deadline - System.currentTimeMillis()
+                    if (remaining <= 0L) break
+                    runCatching { foregroundLock.wait(minOf(remaining, 200L)) }
+                }
+            }
+            return foregroundPackage == packageName
+        }
     }
 }
