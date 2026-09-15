@@ -49,6 +49,59 @@ export default function TommyChatDeleteEnhancer() {
       window.location.reload();
     };
 
+    const sendDirectReelsTest = async (button) => {
+      button.disabled = true;
+      const original = button.textContent;
+      button.textContent = 'Sending…';
+      try {
+        const { data: auth } = await supabase.auth.getSession();
+        if (!auth?.session?.user?.id) {
+          window.alert('Please log in to Tommy first.');
+          return;
+        }
+
+        const command = {
+          action: 'OPEN_INSTAGRAM_REELS',
+          original: 'Test Instagram Reels',
+        };
+
+        const { error } = await supabase.from('tommy_commands').insert({
+          channel: 'tommy-main',
+          source: 'web-test',
+          command: JSON.stringify(command),
+          status: 'pending',
+        });
+
+        if (error) throw error;
+        button.textContent = '✓ Sent';
+        setTimeout(() => { if (!disposed) button.textContent = original; }, 1200);
+      } catch (error) {
+        button.textContent = original;
+        window.alert(`Could not send Reels test: ${error.message}`);
+      } finally {
+        button.disabled = false;
+      }
+    };
+
+    const addReelsTestButton = () => {
+      const reelsButton = Array.from(document.querySelectorAll('button')).find(
+        (button) => (button.textContent || '').trim().toLowerCase() === 'instagram reels'
+      );
+      if (!reelsButton || reelsButton.dataset.testButtonAdded === 'true') return;
+
+      const testButton = document.createElement('button');
+      testButton.type = 'button';
+      testButton.className = reelsButton.className;
+      testButton.textContent = '🧪 Test Reels';
+      testButton.title = 'Direct Android Reels test — bypasses Gemini';
+      testButton.setAttribute('aria-label', 'Test Instagram Reels directly');
+      testButton.style.marginLeft = '8px';
+      testButton.addEventListener('click', () => sendDirectReelsTest(testButton));
+
+      reelsButton.dataset.testButtonAdded = 'true';
+      reelsButton.parentElement?.appendChild(testButton);
+    };
+
     const removeStaleFakeYouTubeCards = () => {
       const messages = Array.from(document.querySelectorAll('.chat .msg.tommy'));
       messages.forEach((message) => {
@@ -60,8 +113,8 @@ export default function TommyChatDeleteEnhancer() {
 
     const decorate = () => {
       if (disposed) return;
-
       removeStaleFakeYouTubeCards();
+      addReelsTestButton();
 
       const items = Array.from(document.querySelectorAll('.sideRecent .recentItem'));
       items.forEach((item, index) => {
