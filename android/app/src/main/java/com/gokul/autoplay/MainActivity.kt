@@ -1,7 +1,6 @@
 package com.gokul.autoplay
 
 import android.Manifest
-import android.app.Activity
 import android.content.pm.PackageManager
 import android.os.Bundle
 import android.webkit.PermissionRequest
@@ -12,13 +11,17 @@ import android.webkit.WebViewClient
 import androidx.activity.ComponentActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import com.gokul.autoplay.skills.TommySkillEngine
+import org.json.JSONObject
 
 class MainActivity : ComponentActivity() {
     private lateinit var webView: WebView
     private var pendingWebPermissionRequest: PermissionRequest? = null
+    private var supabaseBridge: SupabaseTommyBridge? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        TommySkillEngine.initialize()
 
         webView = WebView(this).apply {
             settings.apply {
@@ -69,18 +72,17 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun startTommyWebBridge() {
-        val bridge = SupabaseTommyBridge(this) { command ->
-            val result = executeWebCommand(command)
-            result
+        supabaseBridge = SupabaseTommyBridge(this) { command ->
+            executeWebCommand(command)
         }
-        bridge.start()
+        supabaseBridge?.start()
     }
 
-    private fun executeWebCommand(command: org.json.JSONObject): String {
+    private fun executeWebCommand(command: JSONObject): String {
         val raw = command.optString("command").trim()
         if (raw.isBlank()) return "FAILED: Empty command from Tommy web"
 
-        val ai = runCatching { org.json.JSONObject(raw) }.getOrNull()
+        val ai = runCatching { JSONObject(raw) }.getOrNull()
         val action = ai?.optString("action").orEmpty()
         val target = ai?.optString("target").orEmpty()
         val query = ai?.optString("query").orEmpty()
@@ -98,7 +100,7 @@ class MainActivity : ComponentActivity() {
 
         if (skillCommand.isBlank()) return "FAILED: Tommy could not understand the web command"
 
-        val result = com.gokul.autoplay.skills.TommySkillEngine.execute(this, skillCommand)
+        val result = TommySkillEngine.execute(this, skillCommand)
         return if (result.success) {
             "OK: ${result.message}"
         } else {
@@ -132,6 +134,8 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        supabaseBridge?.stop()
+        supabaseBridge = null
         if (::webView.isInitialized) {
             webView.stopLoading()
             webView.destroy()
