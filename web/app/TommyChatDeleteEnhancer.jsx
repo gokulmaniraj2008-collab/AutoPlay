@@ -61,20 +61,47 @@ export default function TommyChatDeleteEnhancer() {
         }
 
         const command = {
-          action: 'OPEN_INSTAGRAM_REELS',
+          action: 'open_instagram_reels',
           original: 'Test Instagram Reels',
+          reply: 'Opening Instagram Reels.',
         };
 
-        const { error } = await supabase.from('tommy_commands').insert({
+        const { data: inserted, error } = await supabase.from('tommy_commands').insert({
           channel: 'tommy-main',
           source: 'web-test',
           command: JSON.stringify(command),
           status: 'pending',
-        });
+        }).select('id').single();
 
         if (error) throw error;
-        button.textContent = '✓ Sent';
-        setTimeout(() => { if (!disposed) button.textContent = original; }, 1200);
+        if (!inserted?.id) throw new Error('Tommy command was created without an id.');
+
+        button.textContent = 'Opening…';
+
+        let latest = null;
+        for (let i = 0; i < 20; i += 1) {
+          await new Promise((resolve) => setTimeout(resolve, 500));
+          const { data, error: readError } = await supabase
+            .from('tommy_commands')
+            .select('status,response')
+            .eq('id', inserted.id)
+            .single();
+          if (readError) throw readError;
+          latest = data;
+          if (data.status === 'done' || data.status === 'failed') break;
+        }
+
+        if (latest?.status === 'done') {
+          button.textContent = '✓ Reels command done';
+        } else if (latest?.status === 'failed') {
+          button.textContent = '✕ Android failed';
+          window.alert(latest.response || 'Android Tommy failed to execute the Reels command.');
+        } else {
+          button.textContent = '⌛ Android not responding';
+          window.alert('Command reached Supabase but Android Tommy did not acknowledge it within 10 seconds. Keep the Tommy Android app running and check Accessibility Service.');
+        }
+
+        setTimeout(() => { if (!disposed) button.textContent = original; }, 2500);
       } catch (error) {
         button.textContent = original;
         window.alert(`Could not send Reels test: ${error.message}`);
