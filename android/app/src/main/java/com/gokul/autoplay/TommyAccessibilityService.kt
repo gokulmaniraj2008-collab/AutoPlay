@@ -35,16 +35,11 @@ class TommyAccessibilityService : AccessibilityService() {
 
     private fun openRecentAppsInternal() { performGlobalAction(GLOBAL_ACTION_RECENTS) }
 
-    /**
-     * Captures the current display through Android's Accessibility screenshot API.
-     * This is the foundation for Tommy's future visual/vision mode.
-     */
     private fun captureScreenInternal(callback: (Bitmap?) -> Unit) {
         if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.R) {
             callback(null)
             return
         }
-
         val displayId = display?.displayId ?: 0
         takeScreenshot(
             displayId,
@@ -59,51 +54,59 @@ class TommyAccessibilityService : AccessibilityService() {
                     callback(bitmap)
                 }
 
-                override fun onFailure(errorCode: Int) {
-                    callback(null)
-                }
+                override fun onFailure(errorCode: Int) = callback(null)
             }
         )
     }
 
+    private fun locateScreenTargetInternal(instruction: String, callback: (TommyVisionEngine.Target?, String?) -> Unit) {
+        captureScreenInternal { bitmap ->
+            if (bitmap == null) {
+                callback(null, "Tommy could not capture the screen")
+                return@captureScreenInternal
+            }
+            TommyVisionEngine.locate(bitmap, instruction) { target, error ->
+                bitmap.recycle()
+                callback(target, error)
+            }
+        }
+    }
+
+    private fun tapVisionTargetInternal(target: TommyVisionEngine.Target, minConfidence: Float = 0.78f): Boolean {
+        if (!target.found || target.confidence < minConfidence) return false
+        val metrics = resources.displayMetrics
+        return dispatchTapNearRightCenter(target.xRatio, target.yRatio, metrics)
+    }
+
     private fun performTommyActionInternal(action: String): Boolean {
         return when {
-            action == "OPEN_INSTAGRAM_REELS" ->
-                waitForInstagramAndClick("Reels", "reels")
-
-            action == "SCROLL_REEL" ->
-                if (isInstagramForeground()) dispatchSwipe(0.50f, 0.78f, 0.50f, 0.25f, 350) else false
-
+            action == "OPEN_INSTAGRAM_REELS" -> waitForInstagramAndClick("Reels", "reels")
+            action == "SCROLL_REEL" -> if (isInstagramForeground()) dispatchSwipe(0.50f, 0.78f, 0.50f, 0.25f, 350) else false
             action == "LIKE_REEL" -> {
                 if (!isInstagramForeground()) return false
                 val clicked = findAndClickAny("Like", "like")
                 if (!clicked) dispatchTapNearRightCenter(0.90f, 0.62f) else true
             }
-
             action == "FOLLOW_ACCOUNT" -> {
                 if (!isInstagramForeground()) return false
                 val clicked = findAndClickExactOrDescription("Follow", "follow")
                 if (!clicked) findAndClickExactOrDescription("Follow back", "follow back") else true
             }
-
             action == "OPEN_COMMENTS" -> {
                 if (!isInstagramForeground()) return false
                 val clicked = findAndClickAny("Comment", "comment", "Comments", "comments")
                 if (!clicked) dispatchTapNearRightCenter(0.90f, 0.53f) else true
             }
-
             action.startsWith("FOLLOW_PROFILE:") -> {
                 val username = action.removePrefix("FOLLOW_PROFILE:").trim().removePrefix("@").trim()
                 if (username.isBlank()) return false
                 openInstagramProfileAndFollow(username)
             }
-
             else -> false
         }
     }
 
-    private fun isInstagramForeground(): Boolean =
-        rootInActiveWindow?.packageName?.toString() == INSTAGRAM_PACKAGE
+    private fun isInstagramForeground(): Boolean = rootInActiveWindow?.packageName?.toString() == INSTAGRAM_PACKAGE
 
     private fun waitForInstagramAndClick(vararg labels: String): Boolean {
         if (!waitForForegroundPackage(INSTAGRAM_PACKAGE, 2500L)) return false
@@ -112,33 +115,23 @@ class TommyAccessibilityService : AccessibilityService() {
 
     private fun openInstagramProfileAndFollow(username: String): Boolean {
         return try {
-            startActivity(
-                Intent(Intent.ACTION_VIEW, Uri.parse("https://www.instagram.com/$username/")).apply {
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                }
-            )
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.instagram.com/$username/")).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            })
             if (!waitForForegroundPackage(INSTAGRAM_PACKAGE, 4000L)) return false
             Thread.sleep(500L)
             val clicked = findAndClickExactOrDescription("Follow", "follow")
             if (!clicked) findAndClickExactOrDescription("Follow back", "follow back") else true
-        } catch (_: Exception) {
-            false
-        }
+        } catch (_: Exception) { false }
     }
 
     private fun sendChatGPTMessageInternal(message: String): Boolean {
         val root = rootInActiveWindow ?: return false
-        val packageName = root.packageName?.toString().orEmpty()
-        if (packageName != "com.openai.chatgpt") return false
-
+        if (root.packageName?.toString().orEmpty() != "com.openai.chatgpt") return false
         val input = findChatInput(root) ?: return false
         if (!input.performAction(AccessibilityNodeInfo.ACTION_FOCUS)) return false
-        val args = Bundle().apply {
-            putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, message)
-        }
-        val typed = input.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
-        if (!typed) return false
-
+        val args = Bundle().apply { putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, message) }
+        if (!input.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)) return false
         Thread.sleep(250L)
         return clickSendButton(rootInActiveWindow ?: root)
     }
@@ -151,30 +144,21 @@ class TommyAccessibilityService : AccessibilityService() {
             val className = node.className?.toString().orEmpty()
             val text = node.text?.toString().orEmpty()
             val hint = node.hintText?.toString().orEmpty()
-            if (node.isEditable ||
-                className.contains("EditText", ignoreCase = true) ||
-                text.contains("message", ignoreCase = true) ||
-                hint.contains("message", ignoreCase = true) ||
-                hint.contains("ask", ignoreCase = true)) {
-                return node
-            }
+            if (node.isEditable || className.contains("EditText", true) || text.contains("message", true) || hint.contains("message", true) || hint.contains("ask", true)) return node
             for (i in 0 until node.childCount) node.getChild(i)?.let(queue::add)
         }
         return null
     }
 
     private fun clickSendButton(root: AccessibilityNodeInfo): Boolean {
-        val labels = listOf("Send", "send")
-        for (label in labels) {
-            val nodes = root.findAccessibilityNodeInfosByText(label)
-            for (node in nodes) if (clickNodeOrParent(node)) return true
+        for (label in listOf("Send", "send")) {
+            for (node in root.findAccessibilityNodeInfosByText(label)) if (clickNodeOrParent(node)) return true
         }
         val queue = ArrayDeque<AccessibilityNodeInfo>()
         queue.add(root)
         while (queue.isNotEmpty()) {
             val node = queue.removeFirst()
-            val description = node.contentDescription?.toString().orEmpty()
-            if (description.contains("send", ignoreCase = true) && clickNodeOrParent(node)) return true
+            if (node.contentDescription?.toString().orEmpty().contains("send", true) && clickNodeOrParent(node)) return true
             for (i in 0 until node.childCount) node.getChild(i)?.let(queue::add)
         }
         return false
@@ -182,10 +166,7 @@ class TommyAccessibilityService : AccessibilityService() {
 
     private fun findAndClickAny(vararg labels: String): Boolean {
         val root = rootInActiveWindow ?: return false
-        for (label in labels) {
-            val nodes = root.findAccessibilityNodeInfosByText(label)
-            for (node in nodes) if (clickNodeOrParent(node)) return true
-        }
+        for (label in labels) for (node in root.findAccessibilityNodeInfosByText(label)) if (clickNodeOrParent(node)) return true
         return false
     }
 
@@ -198,9 +179,7 @@ class TommyAccessibilityService : AccessibilityService() {
             val node = queue.removeFirst()
             val text = node.text?.toString()?.trim()?.lowercase().orEmpty()
             val description = node.contentDescription?.toString()?.trim()?.lowercase().orEmpty()
-            if (wanted.any { it == text || it == description }) {
-                if (clickNodeOrParent(node)) return true
-            }
+            if (wanted.any { it == text || it == description } && clickNodeOrParent(node)) return true
             for (i in 0 until node.childCount) node.getChild(i)?.let(queue::add)
         }
         return false
@@ -216,8 +195,7 @@ class TommyAccessibilityService : AccessibilityService() {
         return false
     }
 
-    private fun dispatchTapNearRightCenter(xRatio: Float, yRatio: Float): Boolean {
-        val metrics = resources.displayMetrics
+    private fun dispatchTapNearRightCenter(xRatio: Float, yRatio: Float, metrics: android.util.DisplayMetrics = resources.displayMetrics): Boolean {
         val x = metrics.widthPixels * xRatio
         val y = metrics.heightPixels * yRatio
         return dispatchGesture(TapGesture(x, y).build(), null, null)
@@ -230,16 +208,14 @@ class TommyAccessibilityService : AccessibilityService() {
             lineTo(metrics.widthPixels * x2, metrics.heightPixels * y2)
         }
         val gesture = android.accessibilityservice.GestureDescription.Builder()
-            .addStroke(android.accessibilityservice.GestureDescription.StrokeDescription(path, 0, duration))
-            .build()
+            .addStroke(android.accessibilityservice.GestureDescription.StrokeDescription(path, 0, duration)).build()
         return dispatchGesture(gesture, null, null)
     }
 
     private class TapGesture(x: Float, y: Float) {
         private val path = android.graphics.Path().apply { moveTo(x, y); lineTo(x + 1f, y + 1f) }
         fun build(): android.accessibilityservice.GestureDescription = android.accessibilityservice.GestureDescription.Builder()
-            .addStroke(android.accessibilityservice.GestureDescription.StrokeDescription(path, 0, 80))
-            .build()
+            .addStroke(android.accessibilityservice.GestureDescription.StrokeDescription(path, 0, 80)).build()
     }
 
     companion object {
@@ -252,16 +228,33 @@ class TommyAccessibilityService : AccessibilityService() {
         fun performTommyAction(action: String): Boolean = instance?.performTommyActionInternal(action) == true
         fun sendChatGPTMessage(message: String): Boolean = instance?.sendChatGPTMessageInternal(message) == true
 
-        /** Capture the current phone screen for Tommy's future visual reasoning pipeline. */
-        fun captureScreen(callback: (Bitmap?) -> Unit) {
+        /** One-shot screenshot -> Gemini target detection. No continuous screen recording. */
+        fun locateScreenTarget(instruction: String, callback: (TommyVisionEngine.Target?, String?) -> Unit) {
             val service = instance
             if (service == null) {
-                callback(null)
+                callback(null, "Tommy Accessibility Service is not enabled")
                 return
             }
-            Handler(Looper.getMainLooper()).post {
-                service.captureScreenInternal(callback)
+            Handler(Looper.getMainLooper()).post { service.locateScreenTargetInternal(instruction, callback) }
+        }
+
+        /** Vision-assisted tap with a confidence threshold. */
+        fun locateAndTap(instruction: String, callback: (TommyVisionEngine.Target?, Boolean, String?) -> Unit) {
+            locateScreenTarget(instruction) { target, error ->
+                if (target == null) {
+                    callback(null, false, error)
+                    return@locateScreenTarget
+                }
+                val service = instance
+                val clicked = service?.tapVisionTargetInternal(target) == true
+                callback(target, clicked, if (!clicked) "Target not tapped (not found or low confidence)" else null)
             }
+        }
+
+        fun captureScreen(callback: (Bitmap?) -> Unit) {
+            val service = instance
+            if (service == null) { callback(null); return }
+            Handler(Looper.getMainLooper()).post { service.captureScreenInternal(callback) }
         }
 
         fun isServiceEnabled(): Boolean = instance != null
@@ -269,7 +262,6 @@ class TommyAccessibilityService : AccessibilityService() {
         fun waitForForegroundPackage(packageName: String, timeoutMs: Long = 3000L): Boolean {
             if (foregroundPackage == packageName) return true
             if (instance == null) return false
-
             val deadline = System.currentTimeMillis() + timeoutMs
             synchronized(foregroundLock) {
                 while (System.currentTimeMillis() < deadline) {
