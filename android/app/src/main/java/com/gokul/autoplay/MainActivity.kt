@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
@@ -56,7 +57,8 @@ private fun Page1TommyHome(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(24.dp),
+                    .statusBarsPadding()
+                    .padding(start = 24.dp, end = 24.dp, top = 18.dp, bottom = 24.dp),
                 verticalArrangement = Arrangement.spacedBy(18.dp)
             ) {
                 Text(
@@ -129,7 +131,8 @@ private fun Page2TommyChat(onBack: () -> Unit) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(18.dp),
+                    .statusBarsPadding()
+                    .padding(start = 18.dp, end = 18.dp, top = 18.dp, bottom = 18.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Row(
