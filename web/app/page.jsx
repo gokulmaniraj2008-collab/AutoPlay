@@ -5,7 +5,11 @@ import { Mic, MicOff, Send, Power, ChevronUp, Search, Music2, CheckCircle2, Load
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://bqrpgtxtmatxwtdpuoyh.supabase.co';
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-const headers = { 'Content-Type': 'application/json', apikey: SUPABASE_ANON_KEY };
+const headers = {
+  'Content-Type': 'application/json',
+  apikey: SUPABASE_ANON_KEY,
+  Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+};
 
 async function askGemini(text) {
   const r = await fetch(`${SUPABASE_URL}/functions/v1/tommy-gemini`, {
@@ -14,7 +18,10 @@ async function askGemini(text) {
     body: JSON.stringify({ text }),
   });
   const data = await r.json();
-  if (!r.ok) throw new Error(data?.error || 'Gemini request failed');
+  if (!r.ok) {
+    const details = data?.details?.error?.message || data?.details?.message;
+    throw new Error(data?.error ? `${data.error}${details ? `: ${details}` : ''}` : `Gemini request failed (${r.status})`);
+  }
   return data;
 }
 
