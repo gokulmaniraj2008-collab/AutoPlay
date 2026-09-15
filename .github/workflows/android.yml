@@ -48,14 +48,20 @@ jobs:
         run: |
           sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
 
-      - name: Verify Gradle wrapper
-        run: ./gradlew --version
+      - name: Set up Gradle 9.6.0
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.6.0'
+          cache-read-only: false
+
+      - name: Verify Gradle
+        run: gradle --version
 
       - name: Clean Android build
-        run: ./gradlew clean --no-daemon --stacktrace
+        run: gradle clean --no-daemon --stacktrace
 
       - name: Build debug APK
-        run: ./gradlew :app:assembleDebug --stacktrace --no-daemon -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8"
+        run: gradle :app:assembleDebug --stacktrace --no-daemon -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8"
 
       - name: Verify debug APK exists
         run: test -s app/build/outputs/apk/debug/app-debug.apk
