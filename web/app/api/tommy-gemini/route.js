@@ -4,44 +4,72 @@ const SYSTEM_PROMPT = `You are Tommy, an Android voice assistant. Convert the us
 
 export async function POST(request) {
   try {
-    const { text } = await request.json();
-    if (typeof text !== 'string' || !text.trim()) {
+    const body = await request.json();
+    const text = typeof body?.text === 'string' ? body.text.trim() : '';
+
+    if (!text) {
       return NextResponse.json({ error: 'text is required' }, { status: 400 });
     }
 
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
-      return NextResponse.json({ error: 'GEMINI_API_KEY is not configured on Vercel' }, { status: 500 });
+      return NextResponse.json(
+        { error: 'GEMINI_API_KEY is not configured on the production server' },
+        { status: 500 },
+      );
     }
 
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`,
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent',
       {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-goog-api-key': apiKey,
+        },
         body: JSON.stringify({
           systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
-          contents: [{ role: 'user', parts: [{ text: text.trim() }] }],
-          generationConfig: { responseMimeType: 'application/json', temperature: 0.1 },
+          contents: [{ role: 'user', parts: [{ text }] }],
+          generationConfig: {
+            responseMimeType: 'application/json',
+            temperature: 0.1,
+          },
         }),
       },
     );
 
     const data = await response.json();
+
     if (!response.ok) {
       return NextResponse.json(
-        { error: 'Gemini request failed', details: data?.error?.message || data },
+        {
+          error: 'Gemini request failed',
+          details: data?.error?.message || `Gemini HTTP ${response.status}`,
+        },
         { status: 502 },
       );
     }
 
     const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!raw) throw new Error('Gemini returned no content');
+    if (!raw) {
+      return NextResponse.json(
+        { error: 'Gemini returned no content' },
+        { status: 502 },
+      );
+    }
 
-    return NextResponse.json(JSON.parse(raw));
+    const cleaned = raw.replace(/^```json\s*/i, '').replace(/\s*```$/i, '').trim();
+    const result = JSON.parse(cleaned);
+
+    return NextResponse.json({
+      reply: typeof result.reply === 'string' ? result.reply : `I understood: ${text}`,
+      action: typeof result.action === 'string' ? result.action : 'none',
+      target: typeof result.target === 'string' ? result.target : '',
+      query: typeof result.query === 'string' ? result.query : '',
+    });
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Unknown error' },
+      { error: error instanceof Error ? error.message : 'Unknown Gemini server error' },
       { status: 500 },
     );
   }
