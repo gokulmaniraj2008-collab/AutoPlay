@@ -18,6 +18,7 @@ object TommySkillRegistry {
 
         register(HelpSkill())
         register(InstagramSkill())
+        register(AppLaunchSkill())
 
         initialized = true
     }
