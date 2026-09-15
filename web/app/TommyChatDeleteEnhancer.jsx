@@ -49,8 +49,19 @@ export default function TommyChatDeleteEnhancer() {
       window.location.reload();
     };
 
+    const removeStaleFakeYouTubeCards = () => {
+      const messages = Array.from(document.querySelectorAll('.chat .msg.tommy'));
+      messages.forEach((message) => {
+        const text = (message.textContent || '').toLowerCase();
+        const isFakeYouTubeCard = text.includes('youtube is ready') || text.includes('[ open youtube ]');
+        if (isFakeYouTubeCard) message.remove();
+      });
+    };
+
     const decorate = () => {
       if (disposed) return;
+
+      removeStaleFakeYouTubeCards();
 
       const items = Array.from(document.querySelectorAll('.sideRecent .recentItem'));
       items.forEach((item, index) => {
