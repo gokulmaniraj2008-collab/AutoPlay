@@ -38,6 +38,14 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          cmdline-tools-version: 12266719
+          accept-android-sdk-licenses: true
+
+      - name: Install Android SDK packages
+        working-directory: .
+        run: |
+          sdkmanager "platform-tools" "platforms;android-37"
 
       - name: Install Gradle 9.0
         working-directory: .
