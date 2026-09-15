@@ -12,14 +12,14 @@ const headers = {
 };
 
 async function askGemini(text) {
-  const r = await fetch(`${SUPABASE_URL}/functions/v1/tommy-gemini`, {
+  const r = await fetch('/api/tommy-gemini', {
     method: 'POST',
-    headers,
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ text }),
   });
   const data = await r.json();
   if (!r.ok) {
-    const details = data?.details?.error?.message || data?.details?.message;
+    const details = data?.details;
     throw new Error(data?.error ? `${data.error}${details ? `: ${details}` : ''}` : `Gemini request failed (${r.status})`);
   }
   return data;
@@ -156,10 +156,7 @@ export default function HomePage() {
         </div>
         <div className="headerRight">
           <div className="connection"><Wifi size={14} /> Gemini + Supabase + Android</div>
-          <button
-            className={on ? 'power on' : 'power'}
-            onClick={() => { setOn(!on); setListening(false); }}
-          >
+          <button className={on ? 'power on' : 'power'} onClick={() => { setOn(!on); setListening(false); }}>
             <Power size={17} />{on ? 'ON' : 'OFF'}
           </button>
         </div>
@@ -167,59 +164,28 @@ export default function HomePage() {
 
       <main>
         <div className="hero">
-          <div className={listening ? 'orb listening' : 'orb'}>
-            <div className="orb-core">T</div>
-          </div>
+          <div className={listening ? 'orb listening' : 'orb'}><div className="orb-core">T</div></div>
           <div className="eyebrow">TOMMY CONTROL</div>
           <h1>{listening ? 'I’m listening…' : processing ? 'Tommy is working…' : 'What can I do for you?'}</h1>
-          <p>
-            {on
-              ? listening
-                ? 'Speak your command now'
-                : processing
-                  ? 'Gemini → Supabase → Android…'
-                  : 'Type a command or tap the microphone'
-              : 'Tommy is off'}
-          </p>
+          <p>{on ? (listening ? 'Speak your command now' : processing ? 'Gemini → Supabase → Android…' : 'Type a command or tap the microphone') : 'Tommy is off'}</p>
         </div>
 
         <section className="chat">
           {messages.map((m, i) => (
             <div key={i} className={`msg ${m.from}`}>
-              <div>
-                {m.text}
-                {m.status === 'processing' && <Loader2 className="spin" size={14} />}
-              </div>
+              <div>{m.text}{m.status === 'processing' && <Loader2 className="spin" size={14} />}</div>
               {m.status === 'done' && m.from === 'tommy' && <CheckCircle2 size={14} className="doneIcon" />}
             </div>
           ))}
         </section>
 
         <div className="composer">
-          <textarea
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                send();
-              }
-            }}
-            placeholder={on ? 'Ask Tommy anything…' : 'Turn Tommy on to start'}
-          />
-          <button className={listening ? 'mic active' : 'mic'} onClick={startVoice} disabled={!on || processing}>
-            {listening ? <MicOff /> : <Mic />}
-          </button>
-          <button className="send" onClick={send} disabled={!on || processing || !text.trim()}>
-            <Send />
-          </button>
+          <textarea value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }} placeholder={on ? 'Ask Tommy anything…' : 'Turn Tommy on to start'} />
+          <button className={listening ? 'mic active' : 'mic'} onClick={startVoice} disabled={!on || processing}>{listening ? <MicOff /> : <Mic />}</button>
+          <button className="send" onClick={send} disabled={!on || processing || !text.trim()}><Send /></button>
         </div>
 
-        <div className="status">
-          <span className={on ? 'dot live' : 'dot'} />
-          {on ? listening ? 'Listening' : processing ? 'Executing on Android' : 'Tommy is on' : 'Tommy is off'}
-        </div>
-
+        <div className="status"><span className={on ? 'dot live' : 'dot'} />{on ? (listening ? 'Listening' : processing ? 'Executing on Android' : 'Tommy is on') : 'Tommy is off'}</div>
         <div className="quick">
           <button onClick={() => quick('Open Instagram Reels')}>Instagram Reels</button>
           <button onClick={() => quick('Open Instagram and open comments')}>Instagram Comments</button>
