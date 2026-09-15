@@ -32,7 +32,6 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -283,9 +282,9 @@ private suspend fun runTommyCommand(
                         spotifyResults = results
                     )
                 )
-            } else {
-                messages.add(TommyMessage(true, "I couldn't find Spotify results for $query."))
+                return
             }
+            messages.add(TommyMessage(true, "I couldn't load live Spotify results. I'll open Spotify search instead."))
         }
     }
 
