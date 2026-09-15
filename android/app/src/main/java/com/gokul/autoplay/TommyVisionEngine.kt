@@ -60,8 +60,8 @@ object TommyVisionEngine {
                     put("contents", org.json.JSONArray().put(
                         JSONObject().put("parts", org.json.JSONArray()
                             .put(JSONObject().put("text", prompt))
-                            .put(JSONObject().put("inlineData", JSONObject()
-                                .put("mimeType", "image/jpeg")
+                            .put(JSONObject().put("inline_data", JSONObject()
+                                .put("mime_type", "image/jpeg")
                                 .put("data", imageData)
                             ))
                         )
