@@ -269,6 +269,10 @@ private suspend fun runTommyCommand(
 ) {
     messages.add(TommyMessage(false, command))
 
+    // New path: send every Tommy command to Make first. The existing local
+    // skill engine remains the phone-action fallback and execution layer.
+    TommyMakeWebhookClient.sendCommand(command)
+
     if (isSpotifySearch(command)) {
         val query = extractSpotifyQuery(command)
         if (query.isNotBlank()) {
