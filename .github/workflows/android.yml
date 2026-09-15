@@ -18,6 +18,7 @@ permissions:
 env:
   GRADLE_OPTS: -Xmx4g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8
   SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+  GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
 
 jobs:
   build:
@@ -56,6 +57,9 @@ jobs:
 
       - name: Verify Gradle
         run: gradle --version
+
+      - name: Verify Gemini configuration
+        run: test -n "$GEMINI_API_KEY"
 
       - name: Clean Android build
         run: gradle clean --no-daemon --stacktrace
