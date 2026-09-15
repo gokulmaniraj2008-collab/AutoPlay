@@ -3,6 +3,8 @@ package com.gokul.autoplay.skills
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Handler
+import android.os.Looper
 import com.gokul.autoplay.TommyAccessibilityService
 
 /**
@@ -62,7 +64,11 @@ class InstagramSkill : TommySkill {
                 executeAccessibilityAction("SCROLL_REEL", "SCROLL_REEL", "Scrolling to the next Reel.")
 
             normalized.containsAny("reel", "reels") ->
-                executeAccessibilityAction("OPEN_INSTAGRAM_REELS", "OPEN_INSTAGRAM_REELS", "Opening Instagram Reels.")
+                openInstagramThenPerformAction(
+                    context,
+                    "OPEN_INSTAGRAM_REELS",
+                    "Opening Instagram Reels."
+                )
 
             isOpenCommand(normalized) -> openInstagram(context)
 
@@ -102,6 +108,23 @@ class InstagramSkill : TommySkill {
         } catch (_: Exception) {
             TommySkillResult.failure(id, "I couldn't open Instagram on this device.", "OPEN_INSTAGRAM")
         }
+    }
+
+    private fun openInstagramThenPerformAction(
+        context: Context,
+        accessibilityAction: String,
+        successMessage: String
+    ): TommySkillResult {
+        val launchResult = openInstagram(context)
+        if (!launchResult.success) return launchResult
+
+        // Launching an external app is asynchronous. Give Android/Instagram a
+        // moment to publish its accessibility window before trying to click Reels.
+        Handler(Looper.getMainLooper()).postDelayed({
+            TommyAccessibilityService.performTommyAction(accessibilityAction)
+        }, 1400L)
+
+        return TommySkillResult.success(id, successMessage, accessibilityAction)
     }
 
     private fun executeAccessibilityAction(
