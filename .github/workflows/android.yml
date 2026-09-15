@@ -19,6 +19,7 @@ env:
   GRADLE_OPTS: -Xmx4g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8
   SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
   GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+  TOMMY_MAKE_WEBHOOK_URL: ${{ secrets.TOMMY_MAKE_WEBHOOK_URL }}
 
 jobs:
   build:
