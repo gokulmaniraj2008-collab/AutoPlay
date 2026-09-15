@@ -10,6 +10,77 @@ function youtubeCardReply(query, openOnly = false) {
   return `▶ YouTube\n\n┌────────────────────────────┐\n│ ▶  YouTube                  │\n│                            │\n│ 🔍 ${query}                 │\n│                            │\n│ YouTube search results      │\n│ are open.                  │\n│                            │\n│ [ Open YouTube results ]    │\n└────────────────────────────┘`;
 }
 
+function localCommand(text) {
+  const normalized = text.toLowerCase().replace(/[^a-z0-9@._ ]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!normalized) return null;
+
+  const reply = (message, action, target = '', query = '') => ({ reply: message, action, target, query });
+  const extractAfter = (patterns) => {
+    for (const pattern of patterns) {
+      const match = normalized.match(pattern);
+      if (match?.[1]?.trim()) return match[1].trim();
+    }
+    return '';
+  };
+
+  // High-confidence commands bypass Gemini entirely, so normal Tommy actions
+  // continue working even when the Gemini free-tier quota is exhausted.
+  if (normalized.includes('instagram') && normalized.includes('comment')) {
+    return reply('Opening Instagram comments.', 'open_instagram_comments', 'Instagram', '');
+  }
+  if (normalized.includes('instagram') && normalized.includes('reel') && (normalized.includes('open') || normalized.includes('go') || normalized.includes('start'))) {
+    return reply('Opening Instagram Reels.', 'open_instagram_reels', 'Instagram', '');
+  }
+  if (normalized.includes('like') && normalized.includes('reel')) {
+    return reply('Liking this Reel.', 'none', '', '');
+  }
+  if (normalized.includes('follow')) {
+    return reply('Following this account.', 'none', '', '');
+  }
+  if (normalized.includes('scroll') && normalized.includes('reel')) {
+    return reply('Scrolling to the next Reel.', 'none', '', '');
+  }
+  if (normalized.includes('instagram') && (normalized.includes('open') || normalized.includes('start') || normalized.includes('launch'))) {
+    return reply('Instagram opened.', 'open_app', 'Instagram', '');
+  }
+
+  const googleQuery = extractAfter([
+    /(?:search|google) (?:google )?(?:for )?(.+)/,
+    /open google (?:and )?(?:search|look up) (?:for )?(.+)/,
+  ]);
+  if (normalized.includes('google') && normalized.includes('search') && googleQuery) {
+    return reply(`Searching Google for ${googleQuery}.`, 'search_web', 'Google', googleQuery);
+  }
+
+  const spotifyQuery = extractAfter([
+    /(?:search|find) spotify (?:for )?(.+)/,
+    /open spotify (?:and )?(?:search|find) (?:for )?(.+)/,
+  ]);
+  if (normalized.includes('spotify') && normalized.includes('search') && spotifyQuery) {
+    return reply(`Searching Spotify for ${spotifyQuery}.`, 'spotify_search', 'Spotify', spotifyQuery);
+  }
+
+  const youtubeQuery = extractAfter([
+    /(?:search|find) youtube (?:for )?(.+)/,
+    /open youtube (?:and )?(?:search|find) (?:for )?(.+)/,
+  ]);
+  if (normalized.includes('youtube') && normalized.includes('search') && youtubeQuery) {
+    return reply(youtubeCardReply(youtubeQuery), 'youtube_search', 'YouTube', youtubeQuery);
+  }
+
+  if (normalized === 'open youtube' || normalized === 'start youtube' || normalized === 'launch youtube') {
+    return reply(youtubeCardReply('', true), 'open_app', 'YouTube', '');
+  }
+  if (normalized === 'open spotify' || normalized === 'start spotify' || normalized === 'launch spotify') {
+    return reply('Spotify opened.', 'open_app', 'Spotify', '');
+  }
+  if (normalized === 'open google' || normalized === 'start google' || normalized === 'launch google') {
+    return reply('Google opened.', 'open_app', 'Google', '');
+  }
+
+  return null;
+}
+
 export async function POST(request) {
   try {
     const body = await request.json();
@@ -18,6 +89,9 @@ export async function POST(request) {
     if (!text) {
       return NextResponse.json({ error: 'text is required' }, { status: 400 });
     }
+
+    const local = localCommand(text);
+    if (local) return NextResponse.json(local);
 
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
