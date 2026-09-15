@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
-import { Mic, MicOff, Send, Power, ChevronUp, Search, Music2, CheckCircle2, Loader2, Wifi, Mail, LockKeyhole, UserPlus, LogIn, LogOut } from 'lucide-react';
+import { Menu, X, Mic, MicOff, Send, Power, ChevronUp, Search, Music2, CheckCircle2, Loader2, Wifi, Mail, LockKeyhole, UserPlus, LogIn, LogOut, Image, Library, Folder, Clock3, Puzzle, Pencil, Plus, Sparkles } from 'lucide-react';
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://bqrpgtxtmatxwtdpuoyh.supabase.co';
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
@@ -98,9 +98,43 @@ function AuthScreen() {
   );
 }
 
+function TommyMenu({ open, close, messages, onNewChat }) {
+  const recent = messages.filter((m) => m.from === 'user').slice(-6).reverse();
+  return (
+    <>
+      <div className={open ? 'menuOverlay open' : 'menuOverlay'} onClick={close} />
+      <aside className={open ? 'sideMenu open' : 'sideMenu'} aria-hidden={!open}>
+        <div className="sideTop">
+          <div className="sideTitle"><div className="sideLogo">T</div><b>Tommy</b></div>
+          <button className="sideIcon" onClick={close} aria-label="Close menu"><X size={21}/></button>
+        </div>
+        <div className="sideSearch"><Search size={18}/><span>Search Tommy</span></div>
+        <div className="sideFeatures">
+          <button><Sparkles size={22}/><span>Skills</span></button>
+          <button><Library size={22}/><span>Memory</span></button>
+          <button><Folder size={22}/><span>Projects</span></button>
+          <button><Clock3 size={22}/><span>Scheduled</span></button>
+          <button><Puzzle size={22}/><span>Plugins</span></button>
+        </div>
+        <div className="sideDivider" />
+        <div className="sideRecentHeader"><span>Recent chats</span><button onClick={onNewChat} title="New chat"><Pencil size={18}/></button></div>
+        <div className="sideRecent">
+          {recent.length ? recent.map((m, i) => <button className={i === 0 ? 'recentItem active' : 'recentItem'} key={`${m.text}-${i}`} onClick={close}>{m.text}</button>) : <div className="recentEmpty">No chats yet</div>}
+          <button className="seeAll" onClick={close}>See all…</button>
+        </div>
+        <div className="sideBottom">
+          <button className="newChat" onClick={onNewChat}><Plus size={21}/> <span>Chat</span></button>
+          <button className="tommyGo" onClick={close}>GO</button>
+        </div>
+      </aside>
+    </>
+  );
+}
+
 export default function HomePage() {
   const [session, setSession] = useState(undefined);
   const [on, setOn] = useState(true);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [listening, setListening] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [text, setText] = useState('');
@@ -142,6 +176,7 @@ export default function HomePage() {
 
   const send = () => { const q = text.trim(); if (!q || !on) return; setText(''); execute(q); };
   const quick = (q) => setText(q);
+  const newChat = () => { setMessages([{ from: 'tommy', text: 'New Tommy chat started. How can I help?', status: 'done' }]); setText(''); setMenuOpen(false); };
   const logout = async () => { await supabase.auth.signOut(); setOn(false); };
 
   if (session === undefined) return <div className="authLoading"><div className="authLogo">T</div><Loader2 className="spin" size={20}/></div>;
@@ -149,8 +184,9 @@ export default function HomePage() {
 
   return (
     <div className="app">
+      <TommyMenu open={menuOpen} close={() => setMenuOpen(false)} messages={messages} onNewChat={newChat} />
       <header>
-        <div className="brand"><div className="logo">T</div><div><b>Tommy</b><span>AI Assistant</span></div></div>
+        <div className="headerLeft"><button className="menuButton" onClick={() => setMenuOpen(true)} aria-label="Open Tommy menu"><Menu size={22}/></button><div className="brand"><div className="logo">T</div><div><b>Tommy</b><span>AI Assistant</span></div></div></div>
         <div className="headerRight">
           <div className="connection"><Wifi size={14} /> Gemini + Supabase + Android</div>
           <span className="accountEmail">{session.user.email}</span>
