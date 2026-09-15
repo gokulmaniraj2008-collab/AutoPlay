@@ -7,7 +7,6 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
-import android.net.Uri
 import android.os.Build
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -43,6 +42,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.gokul.autoplay.skills.TommySkillEngine
 
 private data class TommyMessage(val fromTommy: Boolean, val text: String)
 
@@ -51,7 +51,10 @@ fun TommyChatPage() {
     val context = LocalContext.current
     val messages = remember {
         mutableStateListOf(
-            TommyMessage(true, "Hi! I'm Tommy. Try: Open Instagram, go to Reels, scroll, like, follow, or open comments.")
+            TommyMessage(
+                true,
+                "Hi! I'm Tommy. Try: Open Instagram, go to Reels, scroll, like, follow, open comments, YouTube, Google, or WhatsApp."
+            )
         )
     }
     var input by remember { mutableStateOf("") }
@@ -59,13 +62,15 @@ fun TommyChatPage() {
     var voiceStatus by remember { mutableStateOf("Tommy is OFF") }
     val listState = rememberLazyListState()
 
+    LaunchedEffect(Unit) {
+        TommySkillEngine.initialize()
+    }
+
     DisposableEffect(context) {
-        var liveTommyMessageIndex = -1
         fun addTommyMessage(text: String) {
             if (text.isBlank()) return
             if (messages.lastOrNull()?.fromTommy == true && messages.lastOrNull()?.text == text) return
             messages.add(TommyMessage(true, text))
-            liveTommyMessageIndex = -1
         }
 
         val statusReceiver = object : BroadcastReceiver() {
@@ -78,7 +83,6 @@ fun TommyChatPage() {
                     TommyStatusEvents.LISTENING -> {
                         voiceStatus = "🎤 $text"
                         addTommyMessage("🎤 $text")
-                        liveTommyMessageIndex = messages.lastIndex
                     }
                     TommyStatusEvents.HEARD -> {
                         voiceStatus = "Command received"
@@ -135,8 +139,7 @@ fun TommyChatPage() {
                 isListening = false
                 input = text
                 voiceStatus = "Command received"
-                // When the floating service is active it is the single command executor.
-                // This prevents the Chat page and service from executing the same command twice.
+                // The floating service remains the single executor when it is active.
                 if (!FloatingTommyService.isRunning) {
                     sendCommand(context, messages, text)
                 }
@@ -190,7 +193,7 @@ fun TommyChatPage() {
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Text("Tommy Chat", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-        Text("Speak commands naturally. Tommy keeps listening for the next action.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("Speak commands naturally. Tommy uses the same skill engine for chat and voice.", color = MaterialTheme.colorScheme.onSurfaceVariant)
         LazyColumn(
             state = listState,
             modifier = Modifier.weight(1f).fillMaxWidth(),
@@ -225,7 +228,10 @@ fun TommyChatPage() {
 
 private fun sendCommand(context: Context, messages: MutableList<TommyMessage>, command: String) {
     messages.add(TommyMessage(false, command))
-    messages.add(TommyMessage(true, executeTommyChatCommand(context, command)))
+
+    val result = TommySkillEngine.execute(context, command)
+    val prefix = if (result.success) "Tommy: " else "Tommy: "
+    messages.add(TommyMessage(true, prefix + result.message))
 }
 
 @Composable
@@ -241,51 +247,4 @@ private fun ChatBubble(message: TommyMessage) {
             )
         ) { Text(message.text, modifier = Modifier.padding(horizontal = 14.dp, vertical = 11.dp)) }
     }
-}
-
-private fun executeTommyChatCommand(context: Context, rawCommand: String): String {
-    val command = rawCommand.lowercase().replace(Regex("[^a-z0-9 ]"), " ").replace(Regex("\\s+"), " ").trim()
-    return when {
-        command.contains("instagram") && (command.contains("open") || command.contains("start") || command.contains("launch")) -> {
-            launchApp(context, "com.instagram.android", "https://www.instagram.com")
-            "OK, opening Instagram full screen. Say 'go reels page' next."
-        }
-        command.contains("instagram") -> { launchApp(context, "com.instagram.android", "https://www.instagram.com"); "OK, Instagram opened." }
-        (command.contains("reel") || command.contains("reels")) && (command.contains("go") || command.contains("open") || command.contains("show") || command.contains("page")) -> {
-            if (tapAccessibilityCommand("OPEN_INSTAGRAM_REELS")) "OK, opening Instagram Reels." else accessibilityRequired()
-        }
-        (command.contains("scroll") || command.contains("swipe") || command.contains("next")) && (command.contains("reel") || command.contains("instagram") || command.contains("down")) -> {
-            if (tapAccessibilityCommand("SCROLL_REEL")) "OK, scrolling to the next reel." else accessibilityRequired()
-        }
-        command.contains("like") && (command.contains("reel") || command.contains("instagram") || command.contains("this")) -> {
-            if (tapAccessibilityCommand("LIKE_REEL")) "OK, liked this Reel." else accessibilityRequired()
-        }
-        command.contains("follow") && (command.contains("account") || command.contains("user") || command.contains("this") || command.contains("instagram")) -> {
-            if (tapAccessibilityCommand("FOLLOW_ACCOUNT")) "OK, following this account." else accessibilityRequired()
-        }
-        (command.contains("comment") || command.contains("comments")) && (command.contains("open") || command.contains("show") || command.contains("view") || command.contains("go") || command.contains("this")) -> {
-            if (tapAccessibilityCommand("OPEN_COMMENTS")) "OK, opening comments." else accessibilityRequired()
-        }
-        command.contains("youtube") -> { launchApp(context, "com.google.android.youtube", "https://www.youtube.com"); "OK, opening YouTube." }
-        command.contains("google") -> { launchApp(context, "com.google.android.googlequicksearchbox", "https://www.google.com"); "OK, opening Google." }
-        command.contains("whatsapp") -> { launchApp(context, "com.whatsapp", "https://www.whatsapp.com"); "OK, opening WhatsApp." }
-        command == "hi" || command == "hello" || command.contains("hello tommy") -> "OK, I'm here."
-        command.contains("help") -> "Try: Open Instagram, go to Reels, scroll, like, follow, or open comments."
-        else -> "I received: \"$rawCommand\". I don't have an action for that yet."
-    }
-}
-
-private fun accessibilityRequired(): String = "Command received. Enable Tommy Accessibility so I can control the Instagram screen."
-private fun tapAccessibilityCommand(action: String): Boolean = TommyAccessibilityService.performTommyAction(action)
-
-private fun launchApp(context: Context, packageName: String, fallbackUrl: String) {
-    val launchIntent = context.packageManager.getLaunchIntentForPackage(packageName)
-    try {
-        if (launchIntent != null) {
-            launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            context.startActivity(launchIntent)
-        } else {
-            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(fallbackUrl)).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) })
-        }
-    } catch (_: Exception) { }
 }
