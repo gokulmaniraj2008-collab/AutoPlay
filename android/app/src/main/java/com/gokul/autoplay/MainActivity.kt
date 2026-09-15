@@ -33,6 +33,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.gokul.autoplay.skills.TommySkillEngine
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
@@ -45,7 +46,9 @@ class MainActivity : ComponentActivity() {
     private var voiceStatus by mutableStateOf("Tap the mic to speak")
     private var input by mutableStateOf("")
     private var geminiBusy by mutableStateOf(false)
+    private var bridgeStatus by mutableStateOf("Connecting to Tommy web…")
     private var speechRecognizer: SpeechRecognizer? = null
+    private var supabaseBridge: SupabaseTommyBridge? = null
 
     private val requestMicPermission = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -56,10 +59,14 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        TommySkillEngine.initialize()
+        startTommyWebBridge()
+
         setContent {
             when (page) {
                 1 -> Page1TommyHome(
                     tommyReady = tommyReady,
+                    bridgeStatus = bridgeStatus,
                     onStart = { tommyReady = true },
                     onChat = { page = 2 }
                 )
@@ -67,6 +74,7 @@ class MainActivity : ComponentActivity() {
                     onBack = { stopVoiceRecognition(); page = 1 },
                     voiceListening = voiceListening,
                     voiceStatus = voiceStatus,
+                    bridgeStatus = bridgeStatus,
                     input = input,
                     geminiBusy = geminiBusy,
                     onInputChange = { input = it },
@@ -74,6 +82,57 @@ class MainActivity : ComponentActivity() {
                     onSend = ::sendToGemini
                 )
             }
+        }
+    }
+
+    private fun startTommyWebBridge() {
+        val bridge = SupabaseTommyBridge(this) { command ->
+            val result = executeWebCommand(command)
+            runOnUiThread {
+                bridgeStatus = if (result.startsWith("OK:")) {
+                    "Website → Android connected"
+                } else {
+                    "Website → Android command failed"
+                }
+            }
+            result
+        }
+        supabaseBridge = bridge
+        bridgeStatus = if (BuildConfig.SUPABASE_PUBLISHABLE_KEY.isBlank()) {
+            "Supabase key missing"
+        } else {
+            "Connected to Tommy web bridge"
+        }
+        bridge.start()
+    }
+
+    private fun executeWebCommand(command: JSONObject): String {
+        val raw = command.optString("command").trim()
+        if (raw.isBlank()) return "FAILED: Empty command from Tommy web"
+
+        val ai = runCatching { JSONObject(raw) }.getOrNull()
+        val action = ai?.optString("action").orEmpty()
+        val target = ai?.optString("target").orEmpty()
+        val query = ai?.optString("query").orEmpty()
+        val original = ai?.optString("original").orEmpty()
+
+        val skillCommand = when (action) {
+            "open_app" -> if (target.isNotBlank()) "open $target" else original
+            "search_web" -> if (query.isNotBlank()) "search Google for $query" else original
+            "open_instagram_reels" -> "open Instagram Reels"
+            "open_instagram_comments" -> "open Instagram and open comments"
+            "spotify_search" -> if (query.isNotBlank()) "search Spotify for $query" else original
+            "none" -> original
+            else -> original
+        }.trim()
+
+        if (skillCommand.isBlank()) return "FAILED: Tommy could not understand the web command"
+
+        val result = TommySkillEngine.execute(this, skillCommand)
+        return if (result.success) {
+            "OK: ${result.message}"
+        } else {
+            "FAILED: ${result.message}"
         }
     }
 
@@ -199,7 +258,9 @@ class MainActivity : ComponentActivity() {
                         messages.add("Action: $action")
                         voiceStatus = "Gemini ready"
                     } else {
-                        messages.add("Tommy: Gemini request failed. Check the server and internet connection.")
+                        val json = runCatching { JSONObject(responseText) }.getOrNull()
+                        val detail = json?.optString("details").orEmpty()
+                        messages.add("Tommy: Gemini request failed${if (detail.isNotBlank()) ": $detail" else "."}")
                         voiceStatus = "Gemini unavailable"
                     }
                 }
@@ -215,6 +276,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         stopVoiceRecognition()
+        supabaseBridge?.stop()
+        supabaseBridge = null
         super.onDestroy()
     }
 }
@@ -222,6 +285,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun Page1TommyHome(
     tommyReady: Boolean,
+    bridgeStatus: String,
     onStart: () -> Unit,
     onChat: () -> Unit
 ) {
@@ -245,11 +309,12 @@ private fun Page1TommyHome(
                         )
                         Text(
                             text = if (tommyReady) {
-                                "Page 1 is ready. Feature 3 Gemini command understanding is now added."
+                                "Website and Android bridge are connected."
                             } else {
-                                "Clean starter build. Tommy Chat now includes voice input and Gemini understanding."
+                                "Tommy Chat includes voice input and Gemini understanding."
                             }
                         )
+                        Text(bridgeStatus, color = MaterialTheme.colorScheme.primary)
                         Button(onClick = onStart, modifier = Modifier.fillMaxWidth()) {
                             Text(if (tommyReady) "Tommy Ready" else "Start Tommy")
                         }
@@ -260,7 +325,7 @@ private fun Page1TommyHome(
                     Column(Modifier.padding(18.dp)) {
                         Text("PAGE 1", fontWeight = FontWeight.Bold)
                         Text("Tommy Home")
-                        Text("Features are added and verified one by one.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("Website → Supabase → Android commands are enabled.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
@@ -273,6 +338,7 @@ private fun Page2TommyChat(
     onBack: () -> Unit,
     voiceListening: Boolean,
     voiceStatus: String,
+    bridgeStatus: String,
     input: String,
     geminiBusy: Boolean,
     onInputChange: (String) -> Unit,
@@ -280,7 +346,7 @@ private fun Page2TommyChat(
     onSend: (MutableList<String>) -> Unit
 ) {
     val messages = androidx.compose.runtime.remember {
-        mutableStateListOf("Tommy: Chat is ready. Feature 3 adds Gemini command understanding.")
+        mutableStateListOf("Tommy: Chat is ready. Website and Android are connected through Supabase.")
     }
 
     MaterialTheme {
@@ -296,6 +362,7 @@ private fun Page2TommyChat(
                     Text("Tommy Chat", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
                     Button(onClick = onBack) { Text("Back") }
                 }
+                Text(bridgeStatus, color = MaterialTheme.colorScheme.primary)
                 LazyColumn(
                     modifier = Modifier.weight(1f).fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
