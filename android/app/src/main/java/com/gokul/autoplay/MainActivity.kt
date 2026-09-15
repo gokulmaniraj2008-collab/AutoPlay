@@ -160,7 +160,13 @@ class MainActivity : ComponentActivity() {
 
         val result = TommySkillEngine.execute(this, skillCommand)
 
-        if (result.success && action == "youtube_search" && query.isNotBlank()) {
+        // Show the same ChatGPT-style YouTube card for BOTH:
+        // 1) "Open YouTube"
+        // 2) "Open YouTube and search ..."
+        if (result.success && (
+                action == "youtube_search" ||
+                (action == "open_app" && target.equals("YouTube", ignoreCase = true))
+            )) {
             showYouTubeCard(query)
         }
 
@@ -198,24 +204,28 @@ class MainActivity : ComponentActivity() {
                         document.head.appendChild(style);
                       }
 
+                      const hasQuery = query.trim().length > 0;
+                      const safeText = query.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
                       const card = document.createElement('div');
                       card.id = 'tommy-youtube-card';
                       card.className = 'tommyYoutubeCard';
                       card.innerHTML = `
                         <div class="tommyYoutubeCardTop"><span class="tommyYoutubeDot">▶</span><span>YouTube</span></div>
-                        <div class="tommyYoutubeSearch">🔍 ${query.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>
-                        <div class="tommyYoutubeStatus">YouTube search results are open.</div>
-                        <button class="tommyYoutubeOpen" type="button">Open YouTube</button>
+                        ${hasQuery ? `<div class="tommyYoutubeSearch">🔍 ${safeText}</div>` : `<div class="tommyYoutubeSearch">▶ YouTube is ready</div>`}
+                        <div class="tommyYoutubeStatus">${hasQuery ? 'YouTube search results are open.' : 'YouTube is open.'}</div>
+                        <button class="tommyYoutubeOpen" type="button">${hasQuery ? 'Open YouTube results' : 'Open YouTube'}</button>
                       `;
                       chat.appendChild(card);
                       card.querySelector('button')?.addEventListener('click', function() {
-                        window.location.href = 'https://www.youtube.com/results?search_query=' + encodeURIComponent(query);
+                        window.location.href = hasQuery
+                          ? 'https://www.youtube.com/results?search_query=' + encodeURIComponent(query)
+                          : 'https://www.youtube.com';
                       });
-                      chat.scrollTop = chat.scrollHeight;
+                      card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
                     })();
                 """.trimIndent()
                 webView.evaluateJavascript(script, null)
-            }, 1200L)
+            }, 250L)
         }
     }
 
